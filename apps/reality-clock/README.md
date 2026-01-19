@@ -42,8 +42,22 @@ In a stable dimension, Φ should remain constant.
 
 | Button | Action |
 |--------|--------|
-| OK | Recalibrate baseline |
+| OK | Open settings menu |
+| LEFT/RIGHT | Navigate screens |
+| UP/DOWN | Scroll details / Adjust brightness |
 | BACK | Exit application |
+
+### Settings Menu
+
+Press OK to access the settings menu:
+- **CALIBRATE** - Recalibrate the dimensional baseline
+- **BRIGHTNESS** - Adjust screen brightness (0-100%)
+
+## Known Issues
+
+### Brightness Flicker
+
+When adjusting brightness or pressing buttons, there may be brief flickers to maximum brightness. This is a limitation of the Flipper Zero's notification system, which overrides direct hardware backlight control on input events. The app uses a high-frequency timer (200Hz) to minimize this effect, but some flicker may still be visible.
 
 ## Display
 

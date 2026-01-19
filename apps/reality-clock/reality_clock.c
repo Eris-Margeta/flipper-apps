@@ -601,37 +601,30 @@ static void draw_screen_brightness(Canvas* canvas, RealityClockState* state) {
     canvas_draw_str_aligned(canvas, 64, 58, AlignCenter, AlignCenter, "L/R=Adjust  Back=Done");
 }
 
+/** Global notification app reference for brightness control */
+static NotificationApp* g_notification = NULL;
+
+/** Global brightness value */
+static uint8_t g_current_brightness = 100;
+
+/**
+ * @brief Apply brightness using direct hardware control
+ */
 static void apply_brightness(uint8_t brightness) {
-    /* Convert 0-100 to 0-255 for hardware */
     uint8_t hw_brightness = (uint8_t)((brightness * 255) / 100);
     furi_hal_light_set(LightBacklight, hw_brightness);
 }
 
-/** Global brightness for access in timer callback */
-static uint8_t g_current_brightness = 100;
-
 /**
- * @brief Timer callback - reapply brightness at high frequency
- *
- * This runs every 50ms to combat system backlight flicker on input events.
- * By constantly reapplying our desired brightness, any system-triggered
- * brightness changes are overridden almost immediately.
+ * @brief Timer callback - reapply brightness at very high frequency (5ms = 200Hz)
+ * This aggressively fights the system's backlight override on input events
  */
 static void brightness_timer_callback(void* ctx) {
     UNUSED(ctx);
-    uint8_t hw_brightness = (uint8_t)((g_current_brightness * 255) / 100);
-    furi_hal_light_set(LightBacklight, hw_brightness);
+    uint8_t hw = (uint8_t)((g_current_brightness * 255) / 100);
+    furi_hal_light_set(LightBacklight, hw);
 }
 
-/**
- * @brief Reapply brightness immediately
- *
- * Called from input callback for immediate response.
- */
-static void brightness_maintain(void) {
-    uint8_t hw_brightness = (uint8_t)((g_current_brightness * 255) / 100);
-    furi_hal_light_set(LightBacklight, hw_brightness);
-}
 
 static void render_callback(Canvas* canvas, void* ctx) {
     RealityClockState* state = (RealityClockState*)ctx;
@@ -664,12 +657,16 @@ static void render_callback(Canvas* canvas, void* ctx) {
 
 static void input_callback(InputEvent* event, void* ctx) {
     FuriMessageQueue* queue = (FuriMessageQueue*)ctx;
-    /* Immediately reapply brightness on ANY input event (press, release, repeat)
-     * This combats system backlight flicker */
-    brightness_maintain();
+
+    /* Immediately reapply brightness on ANY input event
+     * This runs in interrupt context, before system can override */
+    uint8_t hw = (uint8_t)((g_current_brightness * 255) / 100);
+    furi_hal_light_set(LightBacklight, hw);
+
     furi_message_queue_put(queue, event, FuriWaitForever);
+
     /* Reapply again after queue put */
-    brightness_maintain();
+    furi_hal_light_set(LightBacklight, hw);
 }
 
 static void do_calibrate(RealityClockState* state) {
@@ -683,10 +680,17 @@ static void do_calibrate(RealityClockState* state) {
 }
 
 static void process_input(RealityClockState* state, InputEvent* event) {
-    if(event->type != InputTypePress && event->type != InputTypeRepeat) return;
-
-    /* Update global brightness for maintain function */
+    /* Update global brightness */
     g_current_brightness = state->brightness;
+
+    /* ALWAYS reapply brightness on ANY input event (including Release)
+     * This combats system backlight reset on button release */
+    apply_brightness(state->brightness);
+
+    /* Only process actions for Press and Repeat events */
+    if(event->type != InputTypePress && event->type != InputTypeRepeat) {
+        return;
+    }
 
     /* Handle brightness screen */
     if(state->current_screen == SCREEN_BRIGHTNESS) {
@@ -713,8 +717,6 @@ static void process_input(RealityClockState* state, InputEvent* event) {
             default:
                 break;
         }
-        /* Always reapply after processing */
-        apply_brightness(state->brightness);
         return;
     }
 
@@ -833,17 +835,22 @@ int32_t reality_clock_app(void* p) {
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    /* Don't use enforce_on - we manage backlight ourselves to avoid flicker */
 
-    /* Apply initial brightness and set global */
+    /* Set global notification reference */
+    g_notification = notification;
+
+    /* Apply initial brightness */
     g_current_brightness = state->brightness;
     apply_brightness(state->brightness);
 
-    /* Create high-frequency brightness maintenance timer (every 10ms = 100Hz)
-     * This combats system backlight flicker on input events */
+    /* Keep backlight enforced on (won't auto-dim) */
+    notification_message(notification, &sequence_display_backlight_enforce_on);
+
+    /* Create VERY high-frequency brightness timer (5ms = 200Hz)
+     * This aggressively overrides system backlight changes */
     FuriTimer* brightness_timer = furi_timer_alloc(
         brightness_timer_callback, FuriTimerTypePeriodic, NULL);
-    furi_timer_start(brightness_timer, 10);
+    furi_timer_start(brightness_timer, 5);
 
     InputEvent event;
 
@@ -852,23 +859,21 @@ int32_t reality_clock_app(void* p) {
         update_readings(state);
         view_port_update(view_port);
 
-        /* Maintain brightness every loop iteration (prevents system timeout) */
-        apply_brightness(state->brightness);
-
         /* Dynamic sample rate: faster during calibration */
         uint32_t interval = state->is_calibrated ?
             SAMPLE_INTERVAL_NORMAL_MS : SAMPLE_INTERVAL_CALIB_MS;
 
         if(furi_message_queue_get(event_queue, &event, interval) == FuriStatusOk) {
             process_input(state, &event);
-            /* Reapply brightness after ANY input processing */
-            apply_brightness(state->brightness);
         }
     }
 
     /* Stop and free brightness timer */
     furi_timer_stop(brightness_timer);
     furi_timer_free(brightness_timer);
+
+    /* Clear global notification reference */
+    g_notification = NULL;
 
     /* Restore default backlight behavior on exit */
     notification_message(notification, &sequence_display_backlight_on);
