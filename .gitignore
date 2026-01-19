@@ -1,3 +1,6 @@
+# Claude Code
+.claude/
+
 # Build artifacts
 dist/
 build/
@@ -36,3 +39,4 @@ Thumbs.db
 
 # Compiled files
 compile_commands.json
+
