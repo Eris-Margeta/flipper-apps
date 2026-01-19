@@ -7,7 +7,7 @@
  *
  * @author Eris Margeta (@Eris-Margeta)
  * @license MIT
- * @version 2.0
+ * @version 2.1
  *
  * SPDX-License-Identifier: MIT
  */
@@ -674,10 +674,7 @@ static void draw_screen_brightness(Canvas* canvas, RealityClockState* state) {
     canvas_draw_str_aligned(canvas, 64, 58, AlignCenter, AlignCenter, "L/R=Adjust  Back=Done");
 }
 
-/** Global notification app reference for brightness control */
-static NotificationApp* g_notification = NULL;
-
-/** Global brightness value */
+/** Global brightness value for timer callback access */
 static uint8_t g_current_brightness = 100;
 
 /**
@@ -884,6 +881,7 @@ static void process_input(RealityClockState* state, InputEvent* event) {
 
 static RealityClockState* state_alloc(void) {
     RealityClockState* state = malloc(sizeof(RealityClockState));
+    furi_check(state != NULL);  /* Abort if allocation fails */
     memset(state, 0, sizeof(RealityClockState));
 
     state->is_running = true;
@@ -915,9 +913,6 @@ int32_t reality_clock_app(void* p) {
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-
-    /* Set global notification reference */
-    g_notification = notification;
 
     /* Apply initial brightness */
     g_current_brightness = state->brightness;
@@ -951,9 +946,6 @@ int32_t reality_clock_app(void* p) {
     /* Stop and free brightness timer */
     furi_timer_stop(brightness_timer);
     furi_timer_free(brightness_timer);
-
-    /* Clear global notification reference */
-    g_notification = NULL;
 
     /* Restore default backlight behavior on exit */
     notification_message(notification, &sequence_display_backlight_on);

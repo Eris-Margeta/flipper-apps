@@ -150,9 +150,6 @@ MIT License - see [LICENSE](../../LICENSE)
 
 To submit to the Flipper Application Catalog, the following items are needed:
 
-- [ ] **Screenshots** - Add actual screenshots to `screenshots/` folder:
-  - `screenshot1.png` - Main home screen with E-137 display
-  - `screenshot2.png` - Band analysis or settings menu
 - [ ] **Update manifest.yml** - Replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing
 
 ### Ready Items
@@ -163,6 +160,7 @@ To submit to the Flipper Application Catalog, the following items are needed:
 - [x] `application.fam` - App metadata
 - [x] `icon.png` - App icon
 - [x] `paper.html` - Academic paper
+- [x] `screenshots/` - 7 screenshots (screenshot1-7.png)
 
 ---
 
