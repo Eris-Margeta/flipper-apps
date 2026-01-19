@@ -1,0 +1,12 @@
+App(
+    appid="app_template",  # TODO: Change to unique app ID (lowercase, underscores)
+    name="App Template",   # TODO: Change to app display name
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="app_template_main",  # TODO: Match function name in app.c
+    stack_size=2 * 1024,
+    fap_category="Tools",  # Options: Tools, Games, Media, GPIO, NFC, Sub-GHz, RFID, Infrared, iButton, USB, Bluetooth
+    fap_author="@YourGitHub",  # TODO: Your GitHub username
+    fap_version="1.0",
+    fap_description="Short description of your app.",  # TODO: Update description
+    fap_icon="icon.png",
+)

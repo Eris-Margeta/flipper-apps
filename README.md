@@ -4,12 +4,13 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=for-the-badge&logo=flipper&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![CI](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml/badge.svg)
 
 ## Apps
 
-| App | Description | Category |
-|-----|-------------|----------|
-| [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | Tools |
+| App | Description | Version | Category |
+|-----|-------------|---------|----------|
+| [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | 1.1 | Tools |
 
 ## Quick Start
 
@@ -19,7 +20,7 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 - [Poetry](https://python-poetry.org/) (recommended) or pip
 - [Flipper Zero](https://flipperzero.one/) device
 
-### Development Setup (with Poetry)
+### Development Setup
 
 ```bash
 # Clone the repository
@@ -29,87 +30,111 @@ cd flipper-apps
 # Install dependencies with Poetry
 poetry install
 
-# Activate the virtual environment
-poetry shell
-
 # Navigate to an app and build
 cd apps/big-clock
-ufbt
+poetry run ufbt
 
 # Build and install to connected Flipper Zero
-ufbt launch
+poetry run ufbt launch
 ```
 
-### Development Setup (with pip)
+<details>
+<summary>Alternative: Using pip</summary>
 
 ```bash
-# Clone the repository
-git clone https://github.com/Eris-Margeta/flipper-apps.git
-cd flipper-apps
-
-# Create virtual environment (optional but recommended)
+# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # Install ufbt
 pip install ufbt
 
-# Navigate to an app and build
+# Build and run
 cd apps/big-clock
 ufbt launch
 ```
 
+</details>
+
 ## Building Apps
 
 ```bash
-# Build a specific app
-cd apps/big-clock
-ufbt                    # Build only
-ufbt launch             # Build + install + run on Flipper
-
-# The compiled .fap file will be in dist/
-ls dist/*.fap
+cd apps/<app-name>
+poetry run ufbt           # Build only
+poetry run ufbt launch    # Build + install + run on Flipper
 ```
 
-## Manual Installation
+The compiled `.fap` file will be in `dist/`.
 
-1. Build the app with `ufbt`
-2. Copy `dist/<app_name>.fap` to your Flipper's SD card at `/ext/apps/<category>/`
-3. Find the app in your Flipper's menu under the appropriate category
+## Creating a New App
+
+1. Copy the template:
+   ```bash
+   cp -r apps/_template apps/your-app-name
+   ```
+
+2. Update files:
+   - `application.fam` - Set unique `appid`, `name`, version
+   - `app.c` - Implement your app
+   - `README.md` - Document your app
+   - `VERSION` - Set version number
+
+3. Create icon and screenshots
+
+4. Build and test:
+   ```bash
+   cd apps/your-app-name
+   poetry run ufbt launch
+   ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## Repository Structure
 
 ```
 flipper-apps/
-├── README.md           # This file
-├── LICENSE             # MIT License
-├── .gitignore          # Git ignore rules
-└── apps/
-    └── big-clock/      # Big Clock application
-        ├── README.md
-        ├── application.fam
-        └── big_clock.c
+├── .github/workflows/   # CI configuration
+├── apps/
+│   ├── _template/       # Template for new apps
+│   └── big-clock/       # Big Clock application
+├── docs/
+│   └── PUBLISHING.md    # Catalog publishing guide
+├── CONTRIBUTING.md      # Contribution guidelines
+├── SECURITY.md          # Security policy
+├── LICENSE              # MIT License
+└── README.md            # This file
 ```
+
+## App Structure
+
+Each app contains:
+
+```
+apps/<app-name>/
+├── application.fam      # App manifest
+├── *.c / *.h            # Source files
+├── README.md            # Documentation
+├── changelog.md         # Version history
+├── VERSION              # Version number
+├── icon.png             # 10x10px 1-bit icon
+└── screenshots/         # qFlipper screenshots
+```
+
+## Publishing to Flipper Catalog
+
+See [docs/PUBLISHING.md](docs/PUBLISHING.md) for instructions on publishing apps to the official Flipper App Catalog.
 
 ## Contributing
 
-Contributions are welcome! Feel free to:
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request.
 
-1. Fork the repository
-2. Create a feature branch
-3. Add your app to the `apps/` directory
-4. Submit a pull request
+## Security
 
-### App Structure
-
-Each app should have its own directory under `apps/` with:
-- `application.fam` - Flipper app manifest
-- `*.c` / `*.h` - Source files
-- `README.md` - App documentation
+For security concerns, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
 ## Author
 
@@ -117,5 +142,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [Flipper Devices](https://github.com/flipperdevices) for the amazing hardware and SDK
+- [Flipper Devices](https://github.com/flipperdevices) for the hardware and SDK
 - [Flipper Zero Firmware](https://github.com/flipperdevices/flipperzero-firmware)

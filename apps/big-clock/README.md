@@ -3,6 +3,8 @@
 A full-screen digital bedside/tableside clock for Flipper Zero with adjustable screen brightness.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
+![Version](https://img.shields.io/badge/version-1.1-blue)
+![CI](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml/badge.svg)
 
 ## Use Case
 
@@ -59,13 +61,12 @@ Turn your Flipper Zero into a **bedside or desk clock** with:
 ### Build Commands
 
 ```bash
-# Install ufbt if not already installed
+# Using Poetry (recommended)
+poetry run ufbt           # Build only
+poetry run ufbt launch    # Build + install + run
+
+# Using pip
 pip install ufbt
-
-# Build the application
-ufbt
-
-# Build and install to connected Flipper Zero
 ufbt launch
 ```
 
@@ -77,7 +78,7 @@ The compiled `.fap` file will be in the `dist/` directory.
 
 ### Via ufbt (recommended)
 ```bash
-ufbt launch
+poetry run ufbt launch
 ```
 
 ### Manual Installation
@@ -86,16 +87,25 @@ ufbt launch
 
 ## Technical Details
 
-- **Target**: Flipper Zero
-- **App Type**: External (.fap)
-- **Category**: Tools
-- **Stack Size**: 2KB
+| Property | Value |
+|----------|-------|
+| Target | Flipper Zero |
+| App Type | External (.fap) |
+| Category | Tools |
+| Stack Size | 2KB |
+| Version | 1.1 |
 
 ### Implementation Notes
 
 - Uses direct hardware control via `furi_hal_light_set()` for brightness
 - Brightness levels mapped from 0-100% to hardware values (0-255)
 - Continuously maintains brightness to prevent system timeout
+
+## Version History
+
+See [changelog.md](changelog.md) for full version history.
+
+Current version: see [VERSION](VERSION)
 
 ## Known Issues
 

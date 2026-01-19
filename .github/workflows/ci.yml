@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build Apps
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ufbt
+        run: pip install ufbt
+
+      - name: Build all apps
+        run: |
+          for app_dir in apps/*/; do
+            if [ -f "${app_dir}application.fam" ]; then
+              echo "Building ${app_dir}..."
+              cd "${app_dir}"
+              ufbt
+              cd - > /dev/null
+            fi
+          done
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check file structure
+        run: |
+          errors=0
+          for app_dir in apps/*/; do
+            app_name=$(basename "${app_dir}")
+            echo "Checking ${app_name}..."
+
+            # Required files
+            for file in application.fam README.md changelog.md icon.png; do
+              if [ ! -f "${app_dir}${file}" ]; then
+                echo "  ERROR: Missing ${file}"
+                errors=$((errors + 1))
+              fi
+            done
+
+            # Screenshots directory
+            if [ ! -d "${app_dir}screenshots" ]; then
+              echo "  ERROR: Missing screenshots directory"
+              errors=$((errors + 1))
+            elif [ -z "$(ls -A ${app_dir}screenshots/*.png 2>/dev/null)" ]; then
+              echo "  WARNING: No screenshots found"
+            fi
+
+            # Icon validation (10x10 PNG)
+            if [ -f "${app_dir}icon.png" ]; then
+              size=$(file "${app_dir}icon.png" | grep -oP '\d+ x \d+' || echo "unknown")
+              if [ "$size" != "10 x 10" ]; then
+                echo "  WARNING: Icon should be 10x10, found: ${size}"
+              fi
+            fi
+          done
+
+          if [ $errors -gt 0 ]; then
+            echo "Found ${errors} error(s)"
+            exit 1
+          fi
+          echo "All checks passed!"
+
+  validate-version:
+    name: Validate Versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: |
+          for app_dir in apps/*/; do
+            app_name=$(basename "${app_dir}")
+
+            # Extract version from application.fam
+            if [ -f "${app_dir}application.fam" ]; then
+              fam_version=$(grep -oP 'fap_version\s*=\s*"\K[^"]+' "${app_dir}application.fam" || echo "")
+
+              # Check VERSION file if exists
+              if [ -f "${app_dir}VERSION" ]; then
+                file_version=$(cat "${app_dir}VERSION" | tr -d '[:space:]')
+                if [ "$fam_version" != "$file_version" ]; then
+                  echo "ERROR: ${app_name} version mismatch - application.fam: ${fam_version}, VERSION: ${file_version}"
+                  exit 1
+                fi
+              fi
+
+              echo "${app_name}: v${fam_version}"
+            fi
+          done
