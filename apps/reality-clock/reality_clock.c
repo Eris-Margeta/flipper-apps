@@ -49,7 +49,19 @@
 #define SCREEN_HOME          0   /**< Main sci-fi display */
 #define SCREEN_BANDS         1   /**< Band readings */
 #define SCREEN_DETAILS       2   /**< Scrollable details */
-#define SCREEN_COUNT         3
+#define SCREEN_MENU          3   /**< Settings menu */
+#define SCREEN_BRIGHTNESS    4   /**< Brightness slider */
+#define SCREEN_COUNT         5
+
+/** Menu items */
+#define MENU_ITEM_CALIBRATE   0
+#define MENU_ITEM_BRIGHTNESS  1
+#define MENU_ITEM_COUNT       2
+
+/** Brightness settings */
+#define BRIGHTNESS_MIN        0
+#define BRIGHTNESS_MAX        100
+#define BRIGHTNESS_STEP       10
 
 /** Details screen */
 #define DETAILS_LINES        12
@@ -81,7 +93,10 @@ typedef struct {
     bool is_calibrated;
 
     uint8_t current_screen;
+    uint8_t previous_screen;  /**< For returning from menu */
     int8_t scroll_offset;
+    uint8_t menu_selection;   /**< Current menu item */
+    uint8_t brightness;       /**< Current brightness 0-100 */
 
     /** Rolling buffers for each band */
     RollingBuffer lf_buffer;
@@ -518,6 +533,106 @@ static void draw_screen_details(Canvas* canvas, RealityClockState* state) {
     canvas_draw_str(canvas, 2, 62, "<");
 }
 
+static void draw_screen_menu(Canvas* canvas, RealityClockState* state) {
+    /* Draw sci-fi corners */
+    draw_scifi_corners(canvas);
+
+    /* Title */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 8, AlignCenter, AlignCenter, "SETTINGS");
+    draw_scifi_lines(canvas, 14);
+
+    /* Menu items */
+    canvas_set_font(canvas, FontPrimary);
+
+    const char* items[] = {"CALIBRATE", "BRIGHTNESS"};
+
+    for(int i = 0; i < MENU_ITEM_COUNT; i++) {
+        int16_t y = 28 + i * 16;
+
+        if(i == state->menu_selection) {
+            /* Selected item - draw highlight box */
+            canvas_draw_box(canvas, 20, y - 8, 88, 14);
+            canvas_set_color(canvas, ColorWhite);
+            canvas_draw_str_aligned(canvas, 64, y, AlignCenter, AlignCenter, items[i]);
+            canvas_set_color(canvas, ColorBlack);
+        } else {
+            canvas_draw_str_aligned(canvas, 64, y, AlignCenter, AlignCenter, items[i]);
+        }
+    }
+
+    /* Hint at bottom */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 58, AlignCenter, AlignCenter, "OK=Select  Back=Exit");
+}
+
+static void draw_screen_brightness(Canvas* canvas, RealityClockState* state) {
+    /* Draw sci-fi corners */
+    draw_scifi_corners(canvas);
+
+    /* Title */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 8, AlignCenter, AlignCenter, "BRIGHTNESS");
+    draw_scifi_lines(canvas, 14);
+
+    /* Brightness value */
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d%%", state->brightness);
+    canvas_set_font(canvas, FontBigNumbers);
+    canvas_draw_str_aligned(canvas, 64, 32, AlignCenter, AlignCenter, buf);
+
+    /* Slider bar */
+    int16_t bar_x = 14;
+    int16_t bar_y = 44;
+    int16_t bar_w = 100;
+    int16_t bar_h = 8;
+
+    /* Bar outline */
+    canvas_draw_frame(canvas, bar_x, bar_y, bar_w, bar_h);
+
+    /* Fill based on brightness */
+    int16_t fill_w = (bar_w - 2) * state->brightness / 100;
+    if(fill_w > 0) {
+        canvas_draw_box(canvas, bar_x + 1, bar_y + 1, fill_w, bar_h - 2);
+    }
+
+    /* Navigation hint */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 58, AlignCenter, AlignCenter, "L/R=Adjust  Back=Done");
+}
+
+static void apply_brightness(uint8_t brightness) {
+    /* Convert 0-100 to 0-255 for hardware */
+    uint8_t hw_brightness = (uint8_t)((brightness * 255) / 100);
+    furi_hal_light_set(LightBacklight, hw_brightness);
+}
+
+/** Global brightness for access in timer callback */
+static uint8_t g_current_brightness = 100;
+
+/**
+ * @brief Timer callback - reapply brightness at high frequency
+ *
+ * This runs every 50ms to combat system backlight flicker on input events.
+ * By constantly reapplying our desired brightness, any system-triggered
+ * brightness changes are overridden almost immediately.
+ */
+static void brightness_timer_callback(void* ctx) {
+    UNUSED(ctx);
+    uint8_t hw_brightness = (uint8_t)((g_current_brightness * 255) / 100);
+    furi_hal_light_set(LightBacklight, hw_brightness);
+}
+
+/**
+ * @brief Reapply brightness immediately
+ *
+ * Called from input callback for immediate response.
+ */
+static void brightness_maintain(void) {
+    uint8_t hw_brightness = (uint8_t)((g_current_brightness * 255) / 100);
+    furi_hal_light_set(LightBacklight, hw_brightness);
+}
+
 static void render_callback(Canvas* canvas, void* ctx) {
     RealityClockState* state = (RealityClockState*)ctx;
     canvas_clear(canvas);
@@ -532,6 +647,12 @@ static void render_callback(Canvas* canvas, void* ctx) {
         case SCREEN_DETAILS:
             draw_screen_details(canvas, state);
             break;
+        case SCREEN_MENU:
+            draw_screen_menu(canvas, state);
+            break;
+        case SCREEN_BRIGHTNESS:
+            draw_screen_brightness(canvas, state);
+            break;
         default:
             draw_screen_home(canvas, state);
     }
@@ -543,12 +664,91 @@ static void render_callback(Canvas* canvas, void* ctx) {
 
 static void input_callback(InputEvent* event, void* ctx) {
     FuriMessageQueue* queue = (FuriMessageQueue*)ctx;
+    /* Immediately reapply brightness on ANY input event (press, release, repeat)
+     * This combats system backlight flicker */
+    brightness_maintain();
     furi_message_queue_put(queue, event, FuriWaitForever);
+    /* Reapply again after queue put */
+    brightness_maintain();
+}
+
+static void do_calibrate(RealityClockState* state) {
+    state->is_calibrated = false;
+    buffer_init(&state->lf_buffer);
+    buffer_init(&state->hf_buffer);
+    buffer_init(&state->uhf_buffer);
+    state->total_samples = 0;
+    state->phi_baseline = 0;
+    state->match_percent = 0;
 }
 
 static void process_input(RealityClockState* state, InputEvent* event) {
     if(event->type != InputTypePress && event->type != InputTypeRepeat) return;
 
+    /* Update global brightness for maintain function */
+    g_current_brightness = state->brightness;
+
+    /* Handle brightness screen */
+    if(state->current_screen == SCREEN_BRIGHTNESS) {
+        switch(event->key) {
+            case InputKeyLeft:
+                if(state->brightness >= BRIGHTNESS_STEP) {
+                    state->brightness -= BRIGHTNESS_STEP;
+                    g_current_brightness = state->brightness;
+                    apply_brightness(state->brightness);
+                }
+                break;
+            case InputKeyRight:
+                if(state->brightness <= BRIGHTNESS_MAX - BRIGHTNESS_STEP) {
+                    state->brightness += BRIGHTNESS_STEP;
+                    g_current_brightness = state->brightness;
+                    apply_brightness(state->brightness);
+                }
+                break;
+            case InputKeyBack:
+            case InputKeyOk:
+                /* Return to menu */
+                state->current_screen = SCREEN_MENU;
+                break;
+            default:
+                break;
+        }
+        /* Always reapply after processing */
+        apply_brightness(state->brightness);
+        return;
+    }
+
+    /* Handle menu screen */
+    if(state->current_screen == SCREEN_MENU) {
+        switch(event->key) {
+            case InputKeyUp:
+                if(state->menu_selection > 0) {
+                    state->menu_selection--;
+                }
+                break;
+            case InputKeyDown:
+                if(state->menu_selection < MENU_ITEM_COUNT - 1) {
+                    state->menu_selection++;
+                }
+                break;
+            case InputKeyOk:
+                if(state->menu_selection == MENU_ITEM_CALIBRATE) {
+                    do_calibrate(state);
+                    state->current_screen = state->previous_screen;
+                } else if(state->menu_selection == MENU_ITEM_BRIGHTNESS) {
+                    state->current_screen = SCREEN_BRIGHTNESS;
+                }
+                break;
+            case InputKeyBack:
+                state->current_screen = state->previous_screen;
+                break;
+            default:
+                break;
+        }
+        return;
+    }
+
+    /* Handle normal screens (HOME, BANDS, DETAILS) */
     switch(event->key) {
         case InputKeyLeft:
             if(state->current_screen > 0) {
@@ -558,7 +758,7 @@ static void process_input(RealityClockState* state, InputEvent* event) {
             break;
 
         case InputKeyRight:
-            if(state->current_screen < SCREEN_COUNT - 1) {
+            if(state->current_screen < SCREEN_DETAILS) {
                 state->current_screen++;
                 state->scroll_offset = 0;
             }
@@ -581,14 +781,10 @@ static void process_input(RealityClockState* state, InputEvent* event) {
             break;
 
         case InputKeyOk:
-            /* Recalibrate */
-            state->is_calibrated = false;
-            buffer_init(&state->lf_buffer);
-            buffer_init(&state->hf_buffer);
-            buffer_init(&state->uhf_buffer);
-            state->total_samples = 0;
-            state->phi_baseline = 0;
-            state->match_percent = 0;
+            /* Open menu */
+            state->previous_screen = state->current_screen;
+            state->current_screen = SCREEN_MENU;
+            state->menu_selection = 0;
             break;
 
         case InputKeyBack:
@@ -610,6 +806,7 @@ static RealityClockState* state_alloc(void) {
 
     state->is_running = true;
     state->status = DimStatusCalibrating;
+    state->brightness = 100;  /**< Start at max brightness */
 
     buffer_init(&state->lf_buffer);
     buffer_init(&state->hf_buffer);
@@ -636,7 +833,17 @@ int32_t reality_clock_app(void* p) {
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    notification_message(notification, &sequence_display_backlight_enforce_on);
+    /* Don't use enforce_on - we manage backlight ourselves to avoid flicker */
+
+    /* Apply initial brightness and set global */
+    g_current_brightness = state->brightness;
+    apply_brightness(state->brightness);
+
+    /* Create high-frequency brightness maintenance timer (every 10ms = 100Hz)
+     * This combats system backlight flicker on input events */
+    FuriTimer* brightness_timer = furi_timer_alloc(
+        brightness_timer_callback, FuriTimerTypePeriodic, NULL);
+    furi_timer_start(brightness_timer, 10);
 
     InputEvent event;
 
@@ -645,16 +852,26 @@ int32_t reality_clock_app(void* p) {
         update_readings(state);
         view_port_update(view_port);
 
+        /* Maintain brightness every loop iteration (prevents system timeout) */
+        apply_brightness(state->brightness);
+
         /* Dynamic sample rate: faster during calibration */
         uint32_t interval = state->is_calibrated ?
             SAMPLE_INTERVAL_NORMAL_MS : SAMPLE_INTERVAL_CALIB_MS;
 
         if(furi_message_queue_get(event_queue, &event, interval) == FuriStatusOk) {
             process_input(state, &event);
+            /* Reapply brightness after ANY input processing */
+            apply_brightness(state->brightness);
         }
     }
 
-    notification_message(notification, &sequence_display_backlight_enforce_auto);
+    /* Stop and free brightness timer */
+    furi_timer_stop(brightness_timer);
+    furi_timer_free(brightness_timer);
+
+    /* Restore default backlight behavior on exit */
+    notification_message(notification, &sequence_display_backlight_on);
     furi_record_close(RECORD_NOTIFICATION);
 
     gui_remove_view_port(gui, view_port);
