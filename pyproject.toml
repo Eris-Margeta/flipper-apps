@@ -27,3 +27,6 @@ name = "flipper-apps"
 version = "1.0.0"
 description = "Collection of custom Flipper Zero applications"
 authors = ["Eris Margeta <eris.margeta@gmail.com>"]
+
+[tool.poetry.group.dev.dependencies]
+pillow = "^10.0.0"
