@@ -258,6 +258,8 @@ static void input_callback(InputEvent* input_event, void* ctx) {
 }
 
 // Pre-defined brightness levels (must be static to avoid stack issues)
+// 0% = backlight off, 10-100% = increasing brightness
+static const NotificationMessage msg_backlight_0 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 0};
 static const NotificationMessage msg_backlight_10 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 25};
 static const NotificationMessage msg_backlight_20 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 51};
 static const NotificationMessage msg_backlight_30 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 76};
@@ -270,6 +272,7 @@ static const NotificationMessage msg_backlight_90 = {.type = NotificationMessage
 static const NotificationMessage msg_backlight_100 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 255};
 static const NotificationMessage msg_do_not_reset = {.type = NotificationMessageTypeDoNotReset};
 
+static const NotificationSequence seq_brightness_0 = {&msg_backlight_0, &msg_do_not_reset, NULL};
 static const NotificationSequence seq_brightness_10 = {&msg_backlight_10, &msg_do_not_reset, NULL};
 static const NotificationSequence seq_brightness_20 = {&msg_backlight_20, &msg_do_not_reset, NULL};
 static const NotificationSequence seq_brightness_30 = {&msg_backlight_30, &msg_do_not_reset, NULL};
@@ -281,19 +284,28 @@ static const NotificationSequence seq_brightness_80 = {&msg_backlight_80, &msg_d
 static const NotificationSequence seq_brightness_90 = {&msg_backlight_90, &msg_do_not_reset, NULL};
 static const NotificationSequence seq_brightness_100 = {&msg_backlight_100, &msg_do_not_reset, NULL};
 
+// Array indexed by brightness/10 (0-10)
 static const NotificationSequence* brightness_sequences[] = {
-    &seq_brightness_10, &seq_brightness_20, &seq_brightness_30, &seq_brightness_40, &seq_brightness_50,
-    &seq_brightness_60, &seq_brightness_70, &seq_brightness_80, &seq_brightness_90, &seq_brightness_100
+    &seq_brightness_0,   // 0%
+    &seq_brightness_10,  // 10%
+    &seq_brightness_20,  // 20%
+    &seq_brightness_30,  // 30%
+    &seq_brightness_40,  // 40%
+    &seq_brightness_50,  // 50%
+    &seq_brightness_60,  // 60%
+    &seq_brightness_70,  // 70%
+    &seq_brightness_80,  // 80%
+    &seq_brightness_90,  // 90%
+    &seq_brightness_100  // 100%
 };
 
 static void set_backlight_brightness(NotificationApp* notification, uint8_t brightness) {
-    // Clamp brightness to 10-100 range
+    // Clamp brightness to 0-100 range
     if(brightness > 100) brightness = 100;
-    if(brightness < 10) brightness = 10;
 
-    // Get index (0-9) for brightness level
-    uint8_t index = (brightness / 10) - 1;
-    if(index > 9) index = 9;
+    // Get index (0-10) for brightness level
+    uint8_t index = brightness / 10;
+    if(index > 10) index = 10;
 
     notification_message(notification, brightness_sequences[index]);
 }
@@ -358,8 +370,8 @@ int32_t big_clock_app(void* p) {
                         }
                         break;
                     case InputKeyDown:
-                        // Decrease brightness
-                        if(state->brightness > 10) {
+                        // Decrease brightness (allow 0% for screen off)
+                        if(state->brightness >= 10) {
                             state->brightness -= 10;
                             set_backlight_brightness(notification, state->brightness);
                             state->show_brightness_timer = 3;  // Show for 3 seconds

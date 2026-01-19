@@ -11,32 +11,71 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 |-----|-------------|----------|
 | [Big Clock](apps/big-clock/) | Full-screen digital clock with adjustable brightness | Tools |
 
-## Installation
+## Quick Start
 
 ### Prerequisites
 
+- [Python](https://python.org/) 3.10+
+- [Poetry](https://python-poetry.org/) (recommended) or pip
 - [Flipper Zero](https://flipperzero.one/) device
-- [ufbt](https://github.com/flipperdevices/flipperzero-ufbt) (micro Flipper Build Tool)
+
+### Development Setup (with Poetry)
 
 ```bash
-pip install ufbt
+# Clone the repository
+git clone https://github.com/Eris-Margeta/flipper-apps.git
+cd flipper-apps
+
+# Install dependencies with Poetry
+poetry install
+
+# Activate the virtual environment
+poetry shell
+
+# Navigate to an app and build
+cd apps/big-clock
+ufbt
+
+# Build and install to connected Flipper Zero
+ufbt launch
 ```
 
-### Building All Apps
+### Development Setup (with pip)
+
+```bash
+# Clone the repository
+git clone https://github.com/Eris-Margeta/flipper-apps.git
+cd flipper-apps
+
+# Create virtual environment (optional but recommended)
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install ufbt
+pip install ufbt
+
+# Navigate to an app and build
+cd apps/big-clock
+ufbt launch
+```
+
+## Building Apps
 
 ```bash
 # Build a specific app
 cd apps/big-clock
-ufbt
+ufbt                    # Build only
+ufbt launch             # Build + install + run on Flipper
 
-# Build and install to connected Flipper
-ufbt launch
+# The compiled .fap file will be in dist/
+ls dist/*.fap
 ```
 
-### Manual Installation
+## Manual Installation
 
-1. Build the app you want
-2. Copy the `.fap` file from `dist/` to your Flipper's SD card at `/ext/apps/<category>/`
+1. Build the app with `ufbt`
+2. Copy `dist/<app_name>.fap` to your Flipper's SD card at `/ext/apps/<category>/`
+3. Find the app in your Flipper's menu under the appropriate category
 
 ## Repository Structure
 

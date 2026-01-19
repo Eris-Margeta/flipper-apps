@@ -1,17 +1,29 @@
 [project]
-name = "flipper-big-clock"
-version = "0.1.0"
-description = ""
+name = "flipper-apps"
+version = "1.0.0"
+description = "Collection of custom Flipper Zero applications"
 authors = [
-    {name = "habibi9325",email = "eris.margeta@gmail.com"}
+    {name = "Eris Margeta", email = "eris.margeta@gmail.com"}
 ]
 readme = "README.md"
-requires-python = "^3.12"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["flipper", "flipper-zero", "fap", "embedded"]
+
 dependencies = [
-    "ufbt (>=0.2.6,<0.3.0)"
+    "ufbt>=0.2.6"
 ]
 
+[project.urls]
+Homepage = "https://github.com/Eris-Margeta/flipper-apps"
+Repository = "https://github.com/Eris-Margeta/flipper-apps"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "flipper-apps"
+version = "1.0.0"
+description = "Collection of custom Flipper Zero applications"
+authors = ["Eris Margeta <eris.margeta@gmail.com>"]
