@@ -1,16 +1,16 @@
 # Publishing Apps to Flipper App Catalog
 
-This guide explains how to publish apps from this monorepo to the official Flipper Zero App Catalog.
+Guide for publishing apps from this monorepo to the official Flipper Zero App Catalog.
 
 ## How the Catalog Works
 
-The Flipper App Catalog does **not** host your source code. It only contains `manifest.yml` files that **point to** your GitHub repository:
+The Flipper App Catalog does **not** host source code. It only contains `manifest.yml` files that **point to** your GitHub repository:
 
 ```
-YOUR MONOREPO (flipper-apps)          CATALOG (flipper-application-catalog)
+YOUR MONOREPO                         CATALOG (flipper-application-catalog)
 ├── apps/                             ├── applications/
-│   └── big-clock/                    │   └── Tools/
-│       ├── big_clock.c               │       └── big_clock/
+│   └── your-app/                     │   └── <Category>/
+│       ├── your_app.c                │       └── <app_id>/
 │       ├── application.fam           │           └── manifest.yml  ← points to your repo
 │       ├── icon.png                  │
 │       ├── changelog.md              │
@@ -18,7 +18,7 @@ YOUR MONOREPO (flipper-apps)          CATALOG (flipper-application-catalog)
 └── ...                               └── ...
 ```
 
-When someone installs your app, Flipper's infrastructure pulls from YOUR repo using the commit SHA specified in the manifest.
+When users install your app, Flipper's infrastructure pulls from your repo using the commit SHA in the manifest.
 
 ## Prerequisites for Each App
 
@@ -45,20 +45,30 @@ Before publishing, ensure your app directory contains:
 
 ### Creating the Icon
 
-Use Poetry environment to create 10x10px 1-bit icons:
+Create 10x10px 1-bit PNG icons using Pillow:
 
+**With Poetry (recommended):**
 ```bash
-poetry shell
-python3 << 'EOF'
+poetry run python3 scripts/create_icon.py
+```
+
+**With pip:**
+```bash
+pip install Pillow
+python3 scripts/create_icon.py
+```
+
+**Example script:**
+```python
 from PIL import Image
 
-# Create 10x10 1-bit image
-img = Image.new('1', (10, 10), 0)
+img = Image.new('1', (10, 10), 0)  # 1-bit, black background
 
-# Design your icon pixel by pixel
+# Design pixel by pixel (1=white, 0=black)
 pixels = [
-    [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
-    # ... 10 rows of 10 pixels (1=white, 0=black)
+    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    # ... 10 rows total
 ]
 
 for y, row in enumerate(pixels):
@@ -66,7 +76,6 @@ for y, row in enumerate(pixels):
         img.putpixel((x, y), pixel)
 
 img.save('apps/your-app/icon.png')
-EOF
 ```
 
 ### Taking Screenshots
@@ -74,15 +83,15 @@ EOF
 1. Connect Flipper Zero to computer
 2. Open **qFlipper** app
 3. Run your app on the Flipper
-4. Click the screen preview in qFlipper
-5. Save screenshot (do NOT resize or modify)
+4. Click the screen preview in qFlipper → Save Screenshot
+5. Do NOT resize or modify the image
 6. Place in `apps/your-app/screenshots/`
 
 ## Publishing Process
 
 ### Step 1: Prepare Your App
 
-Ensure all required files are in place and committed:
+Verify all required files exist:
 
 ```bash
 cd apps/your-app
@@ -97,16 +106,16 @@ gh repo fork flipperdevices/flipper-application-catalog --clone=true
 ```
 
 This creates:
-- GitHub fork at `your-username/flipper-application-catalog`
-- Local clone (outside this monorepo)
+- GitHub fork at `<your-username>/flipper-application-catalog`
+- Local clone (store outside this monorepo)
 
 ### Step 3: Get Your Commit SHA
 
-After committing all app changes to this repo:
+After committing all app changes:
 
 ```bash
 git add -A
-git commit -m "Prepare app-name for catalog submission"
+git commit -m "Prepare <app-name> for catalog submission"
 git push
 git rev-parse HEAD
 # Copy this SHA for the manifest
@@ -120,9 +129,9 @@ In your catalog fork, create `applications/<Category>/<app_id>/manifest.yml`:
 sourcecode:
   type: git
   location:
-    origin: https://github.com/Eris-Margeta/flipper-apps.git
-    commit_sha: <your-commit-sha>
-    subdir: apps/your-app
+    origin: https://github.com/<your-username>/<your-repo>.git
+    commit_sha: <full-commit-sha>
+    subdir: apps/<your-app>
 description: "@README.md"
 changelog: "@changelog.md"
 screenshots:
@@ -133,14 +142,14 @@ screenshots:
 ### Step 5: Submit Pull Request
 
 ```bash
-cd path/to/flipper-application-catalog
-git checkout -b your-username/app_id_version
+cd /path/to/flipper-application-catalog
+git checkout -b <your-username>/<app_id>_<version>
 git add applications/<Category>/<app_id>/manifest.yml
 git commit -m "Add <app_name> to catalog"
-git push -u origin your-username/app_id_version
+git push -u origin <your-username>/<app_id>_<version>
 ```
 
-Then open PR at: `https://github.com/your-username/flipper-application-catalog/pull/new/your-username/app_id_version`
+Open PR at: `https://github.com/<your-username>/flipper-application-catalog/pull/new/<branch-name>`
 
 ## Updating an App
 
@@ -148,18 +157,27 @@ Then open PR at: `https://github.com/your-username/flipper-application-catalog/p
 2. Increment `fap_version` in `application.fam`
 3. Update `changelog.md`
 4. Commit and push
-5. Get new commit SHA
+5. Get new commit SHA: `git rev-parse HEAD`
 6. Update `commit_sha` in catalog manifest
 7. Submit new PR to catalog
 
 ## Validation
 
-Before submitting, validate your manifest:
+Before submitting, validate your manifest in the catalog repo:
 
+**With Poetry:**
 ```bash
-cd path/to/flipper-application-catalog
+cd /path/to/flipper-application-catalog
+poetry init -n
+poetry add pyyaml pillow
+poetry run python3 tools/bundle.py applications/<Category>/<app_id>/manifest.yml bundle.zip
+```
+
+**With pip:**
+```bash
+cd /path/to/flipper-application-catalog
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r tools/requirements.txt
 python3 tools/bundle.py applications/<Category>/<app_id>/manifest.yml bundle.zip
 ```
