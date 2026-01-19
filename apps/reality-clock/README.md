@@ -1,5 +1,7 @@
 # Reality Dimension Clock for Flipper Zero
 
+![Reality Dimension Clock Screenshot](screenshots/screenshot1.png)
+
 A dimensional stability monitoring application that measures electromagnetic ratios across multiple frequency bands to detect anomalies in physical constants.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
@@ -46,9 +48,16 @@ In a stable dimension, Φ should remain constant.
 Navigate between screens using LEFT/RIGHT:
 
 1. **Home** - Main display with E-137 dimension code and status
+   ![Home Screen](screenshots/screenshot1.png)
+
 2. **Bands** - Real-time band analysis (LF, HF, UHF) with signal bars
+   ![Bands Screen](screenshots/screenshot2.png)
+
 3. **Details** - Scrollable technical details (UP/DOWN to scroll)
+   ![Details Screen](screenshots/screenshot6.png)
+
 4. **Info** - QR code linking to GitHub repository
+   ![Info Screen](screenshots/screenshot7.png)
 
 ## Controls
 
@@ -62,8 +71,14 @@ Navigate between screens using LEFT/RIGHT:
 ### Settings Menu
 
 Press OK to access the settings menu:
+
+![Settings Menu](screenshots/screenshot3.png)
+
 - **CALIBRATE** - Recalibrate the dimensional baseline
+  ![Calibration Screen](screenshots/screenshot4.png)
+
 - **BRIGHTNESS** - Adjust screen brightness (0-100%)
+  ![Brightness Screen](screenshots/screenshot5.png)
 
 ## Known Issues
 

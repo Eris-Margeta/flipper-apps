@@ -1,5 +1,7 @@
 # Big Clock for Flipper Zero
 
+![Big Clock Screenshot](screenshots/screenshot1.png)
+
 A full-screen digital bedside/tableside clock for Flipper Zero with adjustable screen brightness.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
@@ -44,6 +46,9 @@ Turn your Flipper Zero into a **bedside or desk clock** with:
 
 ## Screenshots
 
+![Big Clock Screenshot 2](screenshots/screenshot2.png)
+
+alternate style (thinking about it)
 ```
     ██  ██████    ██████  ██████
     ██      ██  ●     ██  ██
