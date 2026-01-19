@@ -49,9 +49,10 @@
 #define SCREEN_HOME          0   /**< Main sci-fi display */
 #define SCREEN_BANDS         1   /**< Band readings */
 #define SCREEN_DETAILS       2   /**< Scrollable details */
-#define SCREEN_MENU          3   /**< Settings menu */
-#define SCREEN_BRIGHTNESS    4   /**< Brightness slider */
-#define SCREEN_COUNT         5
+#define SCREEN_INFO          3   /**< QR code / info screen */
+#define SCREEN_MENU          4   /**< Settings menu */
+#define SCREEN_BRIGHTNESS    5   /**< Brightness slider */
+#define SCREEN_COUNT         6
 
 /** Menu items */
 #define MENU_ITEM_CALIBRATE   0
@@ -271,6 +272,48 @@ static void update_readings(RealityClockState* state) {
         state->status = classify_status(state->match_percent);
     }
 }
+
+/* ============================================================================
+ * QR CODE DATA - https://github.com/Eris-Margeta/flipper-apps
+ * ============================================================================
+ * 29x29 QR code - displayed at 2x scale (58x58 pixels on screen)
+ */
+
+#define QR_SIZE 29
+#define QR_BYTES_PER_ROW 4
+#define QR_SCALE 2
+
+static const uint8_t qr_code_data[] = {
+    0xFE, 0x2A, 0x9B, 0xF8,  /* Row 0 */
+    0x82, 0xA1, 0x6A, 0x08,  /* Row 1 */
+    0xBA, 0x09, 0x02, 0xE8,  /* Row 2 */
+    0xBA, 0xEF, 0xF2, 0xE8,  /* Row 3 */
+    0xBA, 0x40, 0xFA, 0xE8,  /* Row 4 */
+    0x82, 0xDB, 0x82, 0x08,  /* Row 5 */
+    0xFE, 0xAA, 0xAB, 0xF8,  /* Row 6 */
+    0x00, 0x73, 0x10, 0x00,  /* Row 7 */
+    0xFB, 0xD6, 0x0D, 0x50,  /* Row 8 */
+    0x00, 0x2A, 0xFB, 0x88,  /* Row 9 */
+    0x3F, 0xA5, 0x08, 0x80,  /* Row 10 */
+    0xC9, 0x89, 0x88, 0x50,  /* Row 11 */
+    0x36, 0x6C, 0x40, 0x60,  /* Row 12 */
+    0xFD, 0xC4, 0xAF, 0x88,  /* Row 13 */
+    0x57, 0x7B, 0x2C, 0xE0,  /* Row 14 */
+    0x80, 0xF2, 0x9F, 0x90,  /* Row 15 */
+    0x36, 0xF7, 0x55, 0x60,  /* Row 16 */
+    0xE0, 0x68, 0x97, 0xA8,  /* Row 17 */
+    0xBA, 0xC1, 0xEB, 0xA0,  /* Row 18 */
+    0x85, 0xAA, 0xAE, 0x10,  /* Row 19 */
+    0x96, 0x0E, 0x5F, 0xB8,  /* Row 20 */
+    0x00, 0xE2, 0x28, 0xF8,  /* Row 21 */
+    0xFE, 0xD9, 0xDA, 0xE0,  /* Row 22 */
+    0x82, 0x31, 0x18, 0x90,  /* Row 23 */
+    0xBA, 0xFF, 0x4F, 0xA8,  /* Row 24 */
+    0xBA, 0xAA, 0xB8, 0x78,  /* Row 25 */
+    0xBA, 0xA1, 0x1F, 0xF0,  /* Row 26 */
+    0x82, 0xD9, 0x8D, 0x50,  /* Row 27 */
+    0xFE, 0xA7, 0xD3, 0xA0,  /* Row 28 */
+};
 
 /* ============================================================================
  * SCI-FI UI DRAWING UTILITIES
@@ -533,6 +576,36 @@ static void draw_screen_details(Canvas* canvas, RealityClockState* state) {
     canvas_draw_str(canvas, 2, 62, "<");
 }
 
+static void draw_screen_info(Canvas* canvas, RealityClockState* state) {
+    UNUSED(state);
+
+    /* Draw QR code at 2x scale - 58x58 pixels, centered vertically */
+    int16_t qr_x = 2;
+    int16_t qr_y = (SCREEN_HEIGHT - QR_SIZE * QR_SCALE) / 2;
+
+    for(int row = 0; row < QR_SIZE; row++) {
+        for(int col = 0; col < QR_SIZE; col++) {
+            int byte_idx = row * QR_BYTES_PER_ROW + col / 8;
+            int bit_idx = 7 - (col % 8);
+            if(qr_code_data[byte_idx] & (1 << bit_idx)) {
+                /* Draw 2x2 pixel block for each QR module */
+                canvas_draw_box(canvas,
+                    qr_x + col * QR_SCALE,
+                    qr_y + row * QR_SCALE,
+                    QR_SCALE, QR_SCALE);
+            }
+        }
+    }
+
+    /* Minimal text on right side */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 66, 28, "Scan for");
+    canvas_draw_str(canvas, 66, 40, "source");
+
+    /* Navigation hint */
+    canvas_draw_str(canvas, 120, 8, "<");
+}
+
 static void draw_screen_menu(Canvas* canvas, RealityClockState* state) {
     /* Draw sci-fi corners */
     draw_scifi_corners(canvas);
@@ -609,6 +682,10 @@ static uint8_t g_current_brightness = 100;
 
 /**
  * @brief Apply brightness using direct hardware control
+ *
+ * Note: The preferred method (modifying NotificationApp->settings) requires
+ * access to internal structures not exposed in the public API. We use direct
+ * hardware control with high-frequency maintenance to minimize flicker.
  */
 static void apply_brightness(uint8_t brightness) {
     uint8_t hw_brightness = (uint8_t)((brightness * 255) / 100);
@@ -616,8 +693,8 @@ static void apply_brightness(uint8_t brightness) {
 }
 
 /**
- * @brief Timer callback - reapply brightness at very high frequency (5ms = 200Hz)
- * This aggressively fights the system's backlight override on input events
+ * @brief Timer callback - reapply brightness at high frequency (5ms = 200Hz)
+ * This fights the system's backlight override on input events
  */
 static void brightness_timer_callback(void* ctx) {
     UNUSED(ctx);
@@ -639,6 +716,9 @@ static void render_callback(Canvas* canvas, void* ctx) {
             break;
         case SCREEN_DETAILS:
             draw_screen_details(canvas, state);
+            break;
+        case SCREEN_INFO:
+            draw_screen_info(canvas, state);
             break;
         case SCREEN_MENU:
             draw_screen_menu(canvas, state);
@@ -750,7 +830,7 @@ static void process_input(RealityClockState* state, InputEvent* event) {
         return;
     }
 
-    /* Handle normal screens (HOME, BANDS, DETAILS) */
+    /* Handle normal screens (HOME, BANDS, DETAILS, INFO) */
     switch(event->key) {
         case InputKeyLeft:
             if(state->current_screen > 0) {
@@ -760,7 +840,7 @@ static void process_input(RealityClockState* state, InputEvent* event) {
             break;
 
         case InputKeyRight:
-            if(state->current_screen < SCREEN_DETAILS) {
+            if(state->current_screen < SCREEN_INFO) {
                 state->current_screen++;
                 state->scroll_offset = 0;
             }

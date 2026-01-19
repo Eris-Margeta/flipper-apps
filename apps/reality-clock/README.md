@@ -3,7 +3,7 @@
 A dimensional stability monitoring application that measures electromagnetic ratios across multiple frequency bands to detect anomalies in physical constants.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.0-blue)
+![Version](https://img.shields.io/badge/version-2.1-blue)
 ![Status](https://img.shields.io/badge/status-experimental-yellow)
 
 ## Theoretical Basis
@@ -31,12 +31,24 @@ In a stable dimension, Φ should remain constant.
 
 - **Multi-Band Analysis**: Measures signal strength across LF, HF, and UHF bands
 - **Baseline Calibration**: Establishes your "home dimension" reference
-- **Real-Time Monitoring**: Continuous dimensional stability tracking
+- **Real-Time Monitoring**: Continuous dimensional stability tracking with 1000-sample rolling buffer
 - **Drift Detection**: Shows percentage deviation from baseline
+- **Brightness Control**: Adjustable screen brightness (0-100%)
+- **QR Code Info Screen**: Quick access to source code repository
 - **Status Classification**:
-  - **STABLE**: <5% drift - Normal operation
-  - **FLUCTUATING**: 5-15% drift - Minor deviations detected
-  - **ANOMALY**: >15% drift - Significant deviation detected
+  - **HOME**: >90% match - Home dimension confirmed
+  - **STABLE**: 75-90% match - Within normal parameters
+  - **DRIFT**: 50-75% match - Minor deviations detected
+  - **FOREIGN**: <50% match - Significant deviation detected
+
+## Screens
+
+Navigate between screens using LEFT/RIGHT:
+
+1. **Home** - Main display with E-137 dimension code and status
+2. **Bands** - Real-time band analysis (LF, HF, UHF) with signal bars
+3. **Details** - Scrollable technical details (UP/DOWN to scroll)
+4. **Info** - QR code linking to GitHub repository
 
 ## Controls
 
@@ -111,8 +123,8 @@ poetry run ufbt launch    # Build + install + run
 | Target | Flipper Zero |
 | App Type | External (.fap) |
 | Category | Tools |
-| Stack Size | 4KB |
-| Version | 1.0 |
+| Stack Size | 8KB |
+| Version | 2.1 |
 
 ## Academic Paper
 
@@ -131,6 +143,26 @@ MIT License - see [LICENSE](../../LICENSE)
 ## Author
 
 **Eris Margeta** ([@Eris-Margeta](https://github.com/Eris-Margeta))
+
+## App Catalog Submission
+
+### Missing Items
+
+To submit to the Flipper Application Catalog, the following items are needed:
+
+- [ ] **Screenshots** - Add actual screenshots to `screenshots/` folder:
+  - `screenshot1.png` - Main home screen with E-137 display
+  - `screenshot2.png` - Band analysis or settings menu
+- [ ] **Update manifest.yml** - Replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing
+
+### Ready Items
+
+- [x] `manifest.yml` - Catalog manifest file (needs commit hash)
+- [x] `README.md` - Full documentation
+- [x] `changelog.md` - Version history
+- [x] `application.fam` - App metadata
+- [x] `icon.png` - App icon
+- [x] `paper.html` - Academic paper
 
 ---
 

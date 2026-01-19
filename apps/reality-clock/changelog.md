@@ -2,6 +2,22 @@
 
 All notable changes to Reality Clock will be documented in this file.
 
+## [2.1] - 2026-01-19
+
+### Added
+- **Settings Menu** - Press OK to open settings instead of direct calibration
+  - CALIBRATE option to reset dimensional baseline
+  - BRIGHTNESS slider (0-100%) with persistence during session
+- **QR Code Info Screen** - Navigate right from Details to access
+  - Scannable QR code linking to GitHub source repository
+  - 2x scaled display for reliable scanning
+- **Brightness Control** - Hardware backlight control via furi_hal_light_set
+  - High-frequency (200Hz) timer to maintain brightness
+  - Input callback reapplication to minimize flicker
+
+### Known Issues
+- Brief brightness flicker may occur on button press/release due to Flipper Zero's notification system overriding direct hardware backlight control
+
 ## [2.0] - 2026-01-19
 
 ### Added
