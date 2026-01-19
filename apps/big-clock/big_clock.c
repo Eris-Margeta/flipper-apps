@@ -257,57 +257,16 @@ static void input_callback(InputEvent* input_event, void* ctx) {
     furi_message_queue_put(event_queue, input_event, FuriWaitForever);
 }
 
-// Pre-defined brightness levels (must be static to avoid stack issues)
-// 0% = backlight off, 10-100% = increasing brightness
-static const NotificationMessage msg_backlight_0 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 0};
-static const NotificationMessage msg_backlight_10 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 25};
-static const NotificationMessage msg_backlight_20 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 51};
-static const NotificationMessage msg_backlight_30 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 76};
-static const NotificationMessage msg_backlight_40 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 102};
-static const NotificationMessage msg_backlight_50 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 127};
-static const NotificationMessage msg_backlight_60 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 153};
-static const NotificationMessage msg_backlight_70 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 178};
-static const NotificationMessage msg_backlight_80 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 204};
-static const NotificationMessage msg_backlight_90 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 229};
-static const NotificationMessage msg_backlight_100 = {.type = NotificationMessageTypeLedDisplayBacklight, .data.led.value = 255};
-static const NotificationMessage msg_do_not_reset = {.type = NotificationMessageTypeDoNotReset};
-
-static const NotificationSequence seq_brightness_0 = {&msg_backlight_0, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_10 = {&msg_backlight_10, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_20 = {&msg_backlight_20, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_30 = {&msg_backlight_30, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_40 = {&msg_backlight_40, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_50 = {&msg_backlight_50, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_60 = {&msg_backlight_60, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_70 = {&msg_backlight_70, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_80 = {&msg_backlight_80, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_90 = {&msg_backlight_90, &msg_do_not_reset, NULL};
-static const NotificationSequence seq_brightness_100 = {&msg_backlight_100, &msg_do_not_reset, NULL};
-
-// Array indexed by brightness/10 (0-10)
-static const NotificationSequence* brightness_sequences[] = {
-    &seq_brightness_0,   // 0%
-    &seq_brightness_10,  // 10%
-    &seq_brightness_20,  // 20%
-    &seq_brightness_30,  // 30%
-    &seq_brightness_40,  // 40%
-    &seq_brightness_50,  // 50%
-    &seq_brightness_60,  // 60%
-    &seq_brightness_70,  // 70%
-    &seq_brightness_80,  // 80%
-    &seq_brightness_90,  // 90%
-    &seq_brightness_100  // 100%
-};
-
-static void set_backlight_brightness(NotificationApp* notification, uint8_t brightness) {
+// Direct hardware brightness control (bypasses notification system to avoid flickering)
+static void set_backlight_brightness_direct(uint8_t brightness) {
     // Clamp brightness to 0-100 range
     if(brightness > 100) brightness = 100;
 
-    // Get index (0-10) for brightness level
-    uint8_t index = brightness / 10;
-    if(index > 10) index = 10;
+    // Scale 0-100 to 0-255 for hardware
+    uint8_t hw_value = (brightness * 255) / 100;
 
-    notification_message(notification, brightness_sequences[index]);
+    // Directly set backlight using hardware API (bypasses notification system)
+    furi_hal_light_set(LightBacklight, hw_value);
 }
 
 int32_t big_clock_app(void* p) {
@@ -333,8 +292,8 @@ int32_t big_clock_app(void* p) {
 
     // Open notification service
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    // Set initial brightness
-    set_backlight_brightness(notification, state->brightness);
+    // Set initial brightness using direct hardware control
+    set_backlight_brightness_direct(state->brightness);
 
     InputEvent event;
 
@@ -350,8 +309,9 @@ int32_t big_clock_app(void* p) {
             state->show_brightness_timer--;
         }
 
-        // Keep backlight alive at current brightness (prevents auto-off)
-        set_backlight_brightness(notification, state->brightness);
+        // Continuously maintain brightness using direct hardware control
+        // This bypasses the notification system which causes flickering
+        set_backlight_brightness_direct(state->brightness);
 
         // Request screen update
         view_port_update(view_port);
@@ -365,7 +325,7 @@ int32_t big_clock_app(void* p) {
                         if(state->brightness < 100) {
                             state->brightness += 10;
                             if(state->brightness > 100) state->brightness = 100;
-                            set_backlight_brightness(notification, state->brightness);
+                            set_backlight_brightness_direct(state->brightness);
                             state->show_brightness_timer = 3;  // Show for 3 seconds
                         }
                         break;
@@ -373,7 +333,7 @@ int32_t big_clock_app(void* p) {
                         // Decrease brightness (allow 0% for screen off)
                         if(state->brightness >= 10) {
                             state->brightness -= 10;
-                            set_backlight_brightness(notification, state->brightness);
+                            set_backlight_brightness_direct(state->brightness);
                             state->show_brightness_timer = 3;  // Show for 3 seconds
                         }
                         break;

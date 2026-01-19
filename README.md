@@ -9,7 +9,7 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 
 | App | Description | Category |
 |-----|-------------|----------|
-| [Big Clock](apps/big-clock/) | Full-screen digital clock with adjustable brightness | Tools |
+| [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | Tools |
 
 ## Quick Start
 

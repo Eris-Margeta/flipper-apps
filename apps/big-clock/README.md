@@ -1,23 +1,44 @@
 # Big Clock for Flipper Zero
 
-A full-screen digital clock application for Flipper Zero with adjustable backlight brightness.
+A full-screen digital bedside/tableside clock for Flipper Zero with adjustable screen brightness.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
+
+## Use Case
+
+Turn your Flipper Zero into a **bedside or desk clock** with:
+- Large, easy-to-read digits visible from across the room
+- Adjustable brightness from completely off (0%) to your system maximum
+- Perfect for nightstands, desks, or anywhere you need a simple clock
 
 ## Features
 
 - **Large Display**: Full-screen time display with custom 24x48 pixel digits
-- **Adjustable Brightness**: 10 brightness levels (10% to 100%)
+- **Adjustable Brightness**: 11 levels from 0% (off) to 100% in 10% increments
 - **Visual Feedback**: Shows brightness bar and percentage when adjusting
-- **Always On**: Backlight stays on while the app is running
+- **Always On**: Backlight stays on while the app is running (no timeout)
+- **Flicker-Free**: Smooth brightness transitions without screen flashing
 
 ## Controls
 
 | Button | Action |
 |--------|--------|
 | UP | Increase brightness (+10%) |
-| DOWN | Decrease brightness (-10%) |
+| DOWN | Decrease brightness (-10%, down to 0% = off) |
 | BACK | Exit application |
+
+## Brightness Control
+
+> **Important Note**: This app controls brightness as a **percentage of your system's maximum backlight setting**.
+>
+> The maximum brightness is determined by:
+> **Settings > LCD and Notifications > LCD Backlight**
+>
+> For example:
+> - If your system backlight is set to 50%, then 100% in this app = 50% actual brightness
+> - If your system backlight is set to 100%, then 100% in this app = full brightness
+>
+> **0% brightness** turns the backlight completely off (screen blank but clock still running).
 
 ## Screenshots
 
@@ -69,11 +90,16 @@ ufbt launch
 - **App Type**: External (.fap)
 - **Category**: Tools
 - **Stack Size**: 2KB
-- **API Version**: 87.1
 
-### Brightness Control
+### Implementation Notes
 
-The app uses pre-defined static notification sequences for brightness control to ensure memory safety. Brightness levels are mapped from 10-100% to hardware values (25-255).
+- Uses direct hardware control via `furi_hal_light_set()` for brightness
+- Brightness levels mapped from 0-100% to hardware values (0-255)
+- Continuously maintains brightness to prevent system timeout
+
+## Known Issues
+
+- **Brief flicker on button press/release**: When adjusting brightness, a brief flicker may occur at the moment of button press and release. This appears to be a hardware/firmware limitation related to how the Flipper Zero's backlight system handles brightness changes. The brightness change itself works correctly.
 
 ## License
 
