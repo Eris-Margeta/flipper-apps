@@ -8,4 +8,5 @@ App(
     fap_author="@Eris-Margeta",
     fap_version="1.1",
     fap_description="Bedside clock with adjustable brightness (0-100%). UP/DOWN to adjust.",
+    fap_icon="icon.png",
 )
