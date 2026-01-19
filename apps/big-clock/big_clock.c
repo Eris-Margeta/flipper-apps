@@ -1,28 +1,89 @@
+/**
+ * @file big_clock.c
+ * @brief Big Clock - Full-screen digital clock for Flipper Zero
+ *
+ * A bedside/tableside clock application featuring:
+ * - Large 24x48 pixel custom digits
+ * - Adjustable brightness (0-100% in 10% steps)
+ * - Always-on backlight with manual brightness control
+ *
+ * @author Eris Margeta (@Eris-Margeta)
+ * @license MIT
+ * @version 1.1
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include <furi.h>
 #include <furi_hal.h>
 #include <gui/gui.h>
 #include <input/input.h>
 #include <notification/notification.h>
 #include <notification/notification_messages.h>
-#include <stdio.h>
 
-#define DIGIT_WIDTH 24
-#define DIGIT_HEIGHT 48
-#define COLON_WIDTH 8
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
+/* ============================================================================
+ * CONSTANTS
+ * ============================================================================ */
 
+/** Digit bitmap dimensions */
+#define DIGIT_WIDTH          24
+#define DIGIT_HEIGHT         48
+#define DIGIT_BYTES_PER_ROW  3
+
+/** Colon dimensions */
+#define COLON_WIDTH          8
+#define COLON_DOT_SIZE       4
+#define COLON_TOP_OFFSET     14
+#define COLON_BOTTOM_OFFSET  30
+#define COLON_X_OFFSET       2
+
+/** Screen dimensions */
+#define SCREEN_WIDTH         128
+#define SCREEN_HEIGHT        64
+
+/** Brightness control */
+#define BRIGHTNESS_MIN       0
+#define BRIGHTNESS_MAX       100
+#define BRIGHTNESS_STEP      10
+#define BRIGHTNESS_DISPLAY_DURATION 3  /* seconds to show indicator */
+
+/** Layout calculations */
+#define CLOCK_TOTAL_WIDTH    (4 * DIGIT_WIDTH + COLON_WIDTH)  /* 104 pixels */
+#define CLOCK_START_X        ((SCREEN_WIDTH - CLOCK_TOTAL_WIDTH) / 2)
+
+/** Input handling */
+#define INPUT_QUEUE_SIZE     8
+#define UPDATE_INTERVAL_MS   1000
+
+/* ============================================================================
+ * TYPES
+ * ============================================================================ */
+
+/**
+ * @brief Application state structure
+ *
+ * Holds all mutable state for the clock application.
+ */
 typedef struct {
-    uint8_t hour;
-    uint8_t minute;
-    uint8_t brightness;  // 0-100
-    uint8_t show_brightness_timer;  // Countdown to hide brightness indicator
-    bool running;
+    uint8_t hour;                    /**< Current hour (0-23) */
+    uint8_t minute;                  /**< Current minute (0-59) */
+    uint8_t brightness;              /**< Brightness level (0-100) */
+    uint8_t brightness_indicator;    /**< Countdown timer for brightness UI */
+    bool is_running;                 /**< Application run state */
 } BigClockState;
 
-// Large digit bitmaps (24x48 pixels each)
-// Each digit is defined as an array of bytes, 3 bytes per row (24 bits), 48 rows
-static const uint8_t digit_0[] = {
+/* ============================================================================
+ * DIGIT BITMAP DATA
+ * ============================================================================
+ *
+ * Each digit is a 24x48 pixel bitmap stored as 3 bytes per row (24 bits).
+ * Total size per digit: 48 rows * 3 bytes = 144 bytes.
+ *
+ * Bit ordering: MSB first (bit 7 = leftmost pixel)
+ * 1 = pixel on (white), 0 = pixel off (black)
+ */
+
+static const uint8_t digit_bitmap_0[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
@@ -37,7 +98,7 @@ static const uint8_t digit_0[] = {
     0x07, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_1[] = {
+static const uint8_t digit_bitmap_1[] = {
     0x00, 0x1F, 0x00, 0x00, 0x3F, 0x00, 0x00, 0xFF, 0x00, 0x03, 0xFF, 0x00,
     0x0F, 0xFF, 0x00, 0x1F, 0xFF, 0x00, 0x1F, 0x1F, 0x00, 0x1C, 0x1F, 0x00,
     0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00,
@@ -52,7 +113,7 @@ static const uint8_t digit_1[] = {
     0x0F, 0xFF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_2[] = {
+static const uint8_t digit_bitmap_2[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F,
@@ -67,7 +128,7 @@ static const uint8_t digit_2[] = {
     0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_3[] = {
+static const uint8_t digit_bitmap_3[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F,
@@ -82,7 +143,7 @@ static const uint8_t digit_3[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_4[] = {
+static const uint8_t digit_bitmap_4[] = {
     0x00, 0x01, 0xF8, 0x00, 0x03, 0xF8, 0x00, 0x07, 0xF8, 0x00, 0x0F, 0xF8,
     0x00, 0x1F, 0xF8, 0x00, 0x3E, 0xF8, 0x00, 0x7C, 0xF8, 0x00, 0xF8, 0xF8,
     0x01, 0xF0, 0xF8, 0x03, 0xE0, 0xF8, 0x07, 0xC0, 0xF8, 0x0F, 0x80, 0xF8,
@@ -97,7 +158,7 @@ static const uint8_t digit_4[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_5[] = {
+static const uint8_t digit_bitmap_5[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00,
     0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00,
@@ -112,7 +173,7 @@ static const uint8_t digit_5[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_6[] = {
+static const uint8_t digit_bitmap_6[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xF8, 0x00, 0x00,
@@ -127,7 +188,7 @@ static const uint8_t digit_6[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_7[] = {
+static const uint8_t digit_bitmap_7[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0x00, 0x00, 0x1F, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x3E,
     0x00, 0x00, 0x7E, 0x00, 0x00, 0x7C, 0x00, 0x00, 0xFC, 0x00, 0x00, 0xF8,
@@ -142,7 +203,7 @@ static const uint8_t digit_7[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_8[] = {
+static const uint8_t digit_bitmap_8[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
@@ -157,7 +218,7 @@ static const uint8_t digit_8[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t digit_9[] = {
+static const uint8_t digit_bitmap_9[] = {
     0x07, 0xFF, 0xE0, 0x1F, 0xFF, 0xF8, 0x3F, 0xFF, 0xFC, 0x7F, 0xFF, 0xFE,
     0x7E, 0x00, 0x7E, 0xFC, 0x00, 0x3F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
     0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F, 0xF8, 0x00, 0x1F,
@@ -172,192 +233,359 @@ static const uint8_t digit_9[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t* digits[] = {
-    digit_0, digit_1, digit_2, digit_3, digit_4,
-    digit_5, digit_6, digit_7, digit_8, digit_9
+/** Lookup table for digit bitmaps (0-9) */
+static const uint8_t* const digit_bitmaps[10] = {
+    digit_bitmap_0, digit_bitmap_1, digit_bitmap_2, digit_bitmap_3, digit_bitmap_4,
+    digit_bitmap_5, digit_bitmap_6, digit_bitmap_7, digit_bitmap_8, digit_bitmap_9
 };
 
-static void draw_digit(Canvas* canvas, uint8_t digit, int16_t x, int16_t y) {
-    if(digit > 9) return;
-    const uint8_t* bitmap = digits[digit];
+/* ============================================================================
+ * DRAWING FUNCTIONS
+ * ============================================================================ */
 
-    for(int row = 0; row < DIGIT_HEIGHT; row++) {
-        for(int col = 0; col < DIGIT_WIDTH; col++) {
-            int byte_idx = row * 3 + col / 8;
-            int bit_idx = 7 - (col % 8);
-            if(bitmap[byte_idx] & (1 << bit_idx)) {
+/**
+ * @brief Draw a single digit at the specified position
+ *
+ * Renders a 24x48 pixel digit bitmap to the canvas.
+ *
+ * @param canvas    Canvas to draw on
+ * @param digit     Digit value (0-9)
+ * @param x         X coordinate (left edge)
+ * @param y         Y coordinate (top edge)
+ */
+static void draw_digit(Canvas* canvas, uint8_t digit, int16_t x, int16_t y) {
+    /* Validate digit range */
+    if(digit > 9) {
+        return;
+    }
+
+    const uint8_t* bitmap = digit_bitmaps[digit];
+
+    /* Iterate through each pixel in the bitmap */
+    for(int16_t row = 0; row < DIGIT_HEIGHT; row++) {
+        for(int16_t col = 0; col < DIGIT_WIDTH; col++) {
+            /* Calculate byte and bit position */
+            int16_t byte_index = row * DIGIT_BYTES_PER_ROW + col / 8;
+            int16_t bit_index = 7 - (col % 8);
+
+            /* Draw pixel if bit is set */
+            if(bitmap[byte_index] & (1 << bit_index)) {
                 canvas_draw_dot(canvas, x + col, y + row);
             }
         }
     }
 }
 
+/**
+ * @brief Draw the colon separator between hours and minutes
+ *
+ * Renders two square dots vertically centered.
+ *
+ * @param canvas    Canvas to draw on
+ * @param x         X coordinate (left edge)
+ * @param y         Y coordinate (top of digit area)
+ */
 static void draw_colon(Canvas* canvas, int16_t x, int16_t y) {
-    // Draw two dots for the colon, centered vertically
-    int dot_size = 4;
-    int top_y = y + 14;
-    int bottom_y = y + 30;
+    int16_t top_dot_y = y + COLON_TOP_OFFSET;
+    int16_t bottom_dot_y = y + COLON_BOTTOM_OFFSET;
 
-    canvas_draw_box(canvas, x + 2, top_y, dot_size, dot_size);
-    canvas_draw_box(canvas, x + 2, bottom_y, dot_size, dot_size);
+    canvas_draw_box(canvas, x + COLON_X_OFFSET, top_dot_y, COLON_DOT_SIZE, COLON_DOT_SIZE);
+    canvas_draw_box(canvas, x + COLON_X_OFFSET, bottom_dot_y, COLON_DOT_SIZE, COLON_DOT_SIZE);
 }
 
+/**
+ * @brief Draw the brightness indicator UI
+ *
+ * Shows current brightness percentage and a progress bar.
+ *
+ * @param canvas      Canvas to draw on
+ * @param brightness  Current brightness level (0-100)
+ */
+static void draw_brightness_indicator(Canvas* canvas, uint8_t brightness) {
+    /* Draw brightness text at top */
+    canvas_set_font(canvas, FontSecondary);
+
+    char text_buffer[20];
+    snprintf(text_buffer, sizeof(text_buffer), "Brightness: %d%%", brightness);
+    canvas_draw_str_aligned(canvas, SCREEN_WIDTH / 2, 2, AlignCenter, AlignTop, text_buffer);
+
+    /* Draw progress bar at bottom */
+    const int16_t bar_x = 14;
+    const int16_t bar_y = 56;
+    const int16_t bar_width = 100;
+    const int16_t bar_height = 6;
+
+    /* Bar outline */
+    canvas_draw_frame(canvas, bar_x, bar_y, bar_width, bar_height);
+
+    /* Filled portion */
+    if(brightness > 0) {
+        int16_t fill_width = brightness - 1;
+        if(fill_width > 0) {
+            canvas_draw_box(canvas, bar_x + 1, bar_y + 1, fill_width, bar_height - 2);
+        }
+    }
+}
+
+/* ============================================================================
+ * CALLBACK FUNCTIONS
+ * ============================================================================ */
+
+/**
+ * @brief Render callback - draws the clock display
+ *
+ * Called by the GUI system when the screen needs updating.
+ *
+ * @param canvas  Canvas to draw on
+ * @param ctx     Context pointer (BigClockState*)
+ */
 static void render_callback(Canvas* canvas, void* ctx) {
     BigClockState* state = (BigClockState*)ctx;
 
     canvas_clear(canvas);
 
-    // Calculate positions to center HH:MM
-    // Total width: 4 digits (24 each) + 1 colon (8) = 104 pixels
-    // Screen width: 128, so start at (128-104)/2 = 12
-    int16_t start_x = 12;
-    int16_t y = (SCREEN_HEIGHT - DIGIT_HEIGHT) / 2;  // Center vertically
+    /* Calculate vertical center position */
+    int16_t y = (SCREEN_HEIGHT - DIGIT_HEIGHT) / 2;
+    int16_t x = CLOCK_START_X;
 
-    // Draw hours (tens)
-    draw_digit(canvas, state->hour / 10, start_x, y);
-    start_x += DIGIT_WIDTH;
+    /* Draw hours */
+    draw_digit(canvas, state->hour / 10, x, y);
+    x += DIGIT_WIDTH;
+    draw_digit(canvas, state->hour % 10, x, y);
+    x += DIGIT_WIDTH;
 
-    // Draw hours (ones)
-    draw_digit(canvas, state->hour % 10, start_x, y);
-    start_x += DIGIT_WIDTH;
+    /* Draw colon separator */
+    draw_colon(canvas, x, y);
+    x += COLON_WIDTH;
 
-    // Draw colon
-    draw_colon(canvas, start_x, y);
-    start_x += COLON_WIDTH;
+    /* Draw minutes */
+    draw_digit(canvas, state->minute / 10, x, y);
+    x += DIGIT_WIDTH;
+    draw_digit(canvas, state->minute % 10, x, y);
 
-    // Draw minutes (tens)
-    draw_digit(canvas, state->minute / 10, start_x, y);
-    start_x += DIGIT_WIDTH;
-
-    // Draw minutes (ones)
-    draw_digit(canvas, state->minute % 10, start_x, y);
-
-    // Show brightness indicator when recently changed
-    if(state->show_brightness_timer > 0) {
-        // Draw brightness bar at bottom of screen
-        canvas_set_font(canvas, FontSecondary);
-
-        // Draw "Brightness: XX%" text
-        char brightness_text[20];
-        snprintf(brightness_text, sizeof(brightness_text), "Brightness: %d%%", state->brightness);
-        canvas_draw_str_aligned(canvas, 64, 2, AlignCenter, AlignTop, brightness_text);
-
-        // Draw brightness bar background
-        canvas_draw_frame(canvas, 14, 56, 100, 6);
-        // Draw filled portion
-        uint8_t bar_width = state->brightness;
-        if(bar_width > 0) {
-            canvas_draw_box(canvas, 15, 57, bar_width - 1, 4);
-        }
+    /* Show brightness indicator if recently changed */
+    if(state->brightness_indicator > 0) {
+        draw_brightness_indicator(canvas, state->brightness);
     }
 }
 
+/**
+ * @brief Input callback - handles button events
+ *
+ * Called by the GUI system when input events occur.
+ * Events are forwarded to the main loop via message queue.
+ *
+ * @param input_event  Input event data
+ * @param ctx          Context pointer (FuriMessageQueue*)
+ */
 static void input_callback(InputEvent* input_event, void* ctx) {
-    FuriMessageQueue* event_queue = ctx;
+    FuriMessageQueue* event_queue = (FuriMessageQueue*)ctx;
     furi_message_queue_put(event_queue, input_event, FuriWaitForever);
 }
 
-// Direct hardware brightness control (bypasses notification system to avoid flickering)
-static void set_backlight_brightness_direct(uint8_t brightness) {
-    // Clamp brightness to 0-100 range
-    if(brightness > 100) brightness = 100;
+/* ============================================================================
+ * BACKLIGHT CONTROL
+ * ============================================================================ */
 
-    // Scale 0-100 to 0-255 for hardware
-    uint8_t hw_value = (brightness * 255) / 100;
+/**
+ * @brief Set backlight brightness using direct hardware control
+ *
+ * Bypasses the notification system to avoid flickering issues.
+ * The brightness value is scaled from percentage (0-100) to
+ * hardware value (0-255).
+ *
+ * @param brightness  Brightness percentage (0-100)
+ */
+static void backlight_set_brightness(uint8_t brightness) {
+    /* Clamp to valid range */
+    if(brightness > BRIGHTNESS_MAX) {
+        brightness = BRIGHTNESS_MAX;
+    }
 
-    // Directly set backlight using hardware API (bypasses notification system)
-    furi_hal_light_set(LightBacklight, hw_value);
+    /* Scale percentage to hardware value (0-255) */
+    uint8_t hardware_value = (uint16_t)(brightness * 255) / 100;
+
+    /* Apply directly via hardware API */
+    furi_hal_light_set(LightBacklight, hardware_value);
 }
 
+/* ============================================================================
+ * INPUT HANDLING
+ * ============================================================================ */
+
+/**
+ * @brief Increase brightness by one step
+ *
+ * @param state  Application state
+ */
+static void brightness_increase(BigClockState* state) {
+    if(state->brightness < BRIGHTNESS_MAX) {
+        state->brightness += BRIGHTNESS_STEP;
+        if(state->brightness > BRIGHTNESS_MAX) {
+            state->brightness = BRIGHTNESS_MAX;
+        }
+        backlight_set_brightness(state->brightness);
+        state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
+    }
+}
+
+/**
+ * @brief Decrease brightness by one step
+ *
+ * @param state  Application state
+ */
+static void brightness_decrease(BigClockState* state) {
+    if(state->brightness >= BRIGHTNESS_STEP) {
+        state->brightness -= BRIGHTNESS_STEP;
+        backlight_set_brightness(state->brightness);
+        state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
+    }
+}
+
+/**
+ * @brief Process input event
+ *
+ * @param state  Application state
+ * @param event  Input event to process
+ */
+static void process_input(BigClockState* state, InputEvent* event) {
+    /* Only handle press and repeat events */
+    if(event->type != InputTypePress && event->type != InputTypeRepeat) {
+        return;
+    }
+
+    switch(event->key) {
+        case InputKeyUp:
+            brightness_increase(state);
+            break;
+
+        case InputKeyDown:
+            brightness_decrease(state);
+            break;
+
+        case InputKeyBack:
+            state->is_running = false;
+            break;
+
+        default:
+            /* Ignore other keys */
+            break;
+    }
+}
+
+/* ============================================================================
+ * TIME MANAGEMENT
+ * ============================================================================ */
+
+/**
+ * @brief Update state with current time from RTC
+ *
+ * @param state  Application state to update
+ */
+static void update_time(BigClockState* state) {
+    DateTime datetime;
+    furi_hal_rtc_get_datetime(&datetime);
+
+    state->hour = datetime.hour;
+    state->minute = datetime.minute;
+}
+
+/* ============================================================================
+ * APPLICATION LIFECYCLE
+ * ============================================================================ */
+
+/**
+ * @brief Initialize application state
+ *
+ * @return Pointer to allocated and initialized state
+ */
+static BigClockState* state_alloc(void) {
+    BigClockState* state = malloc(sizeof(BigClockState));
+
+    state->hour = 0;
+    state->minute = 0;
+    state->brightness = BRIGHTNESS_MAX;
+    state->brightness_indicator = 0;
+    state->is_running = true;
+
+    return state;
+}
+
+/**
+ * @brief Free application state
+ *
+ * @param state  State to free
+ */
+static void state_free(BigClockState* state) {
+    free(state);
+}
+
+/**
+ * @brief Main application entry point
+ *
+ * @param p  Unused parameter
+ * @return   Exit code (0 = success)
+ */
 int32_t big_clock_app(void* p) {
     UNUSED(p);
 
-    // Allocate state
-    BigClockState* state = malloc(sizeof(BigClockState));
-    state->brightness = 100;
-    state->show_brightness_timer = 0;
-    state->running = true;
+    /* Initialize state */
+    BigClockState* state = state_alloc();
 
-    // Create message queue for input events
-    FuriMessageQueue* event_queue = furi_message_queue_alloc(8, sizeof(InputEvent));
+    /* Create input event queue */
+    FuriMessageQueue* event_queue = furi_message_queue_alloc(INPUT_QUEUE_SIZE, sizeof(InputEvent));
 
-    // Create viewport
+    /* Set up viewport */
     ViewPort* view_port = view_port_alloc();
     view_port_draw_callback_set(view_port, render_callback, state);
     view_port_input_callback_set(view_port, input_callback, event_queue);
 
-    // Register viewport in GUI
+    /* Register with GUI */
     Gui* gui = furi_record_open(RECORD_GUI);
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
-    // Open notification service
+    /* Open notification service (for cleanup on exit) */
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    // Set initial brightness using direct hardware control
-    set_backlight_brightness_direct(state->brightness);
 
+    /* Set initial brightness */
+    backlight_set_brightness(state->brightness);
+
+    /* Main loop */
     InputEvent event;
 
-    while(state->running) {
-        // Get current time from RTC
-        DateTime datetime;
-        furi_hal_rtc_get_datetime(&datetime);
-        state->hour = datetime.hour;
-        state->minute = datetime.minute;
+    while(state->is_running) {
+        /* Update current time */
+        update_time(state);
 
-        // Decrement brightness display timer
-        if(state->show_brightness_timer > 0) {
-            state->show_brightness_timer--;
+        /* Decrement brightness indicator timer */
+        if(state->brightness_indicator > 0) {
+            state->brightness_indicator--;
         }
 
-        // Continuously maintain brightness using direct hardware control
-        // This bypasses the notification system which causes flickering
-        set_backlight_brightness_direct(state->brightness);
+        /* Maintain brightness (prevents system timeout) */
+        backlight_set_brightness(state->brightness);
 
-        // Request screen update
+        /* Request screen redraw */
         view_port_update(view_port);
 
-        // Wait for input with timeout (update every second)
-        if(furi_message_queue_get(event_queue, &event, 1000) == FuriStatusOk) {
-            if(event.type == InputTypePress || event.type == InputTypeRepeat) {
-                switch(event.key) {
-                    case InputKeyUp:
-                        // Increase brightness
-                        if(state->brightness < 100) {
-                            state->brightness += 10;
-                            if(state->brightness > 100) state->brightness = 100;
-                            set_backlight_brightness_direct(state->brightness);
-                            state->show_brightness_timer = 3;  // Show for 3 seconds
-                        }
-                        break;
-                    case InputKeyDown:
-                        // Decrease brightness (allow 0% for screen off)
-                        if(state->brightness >= 10) {
-                            state->brightness -= 10;
-                            set_backlight_brightness_direct(state->brightness);
-                            state->show_brightness_timer = 3;  // Show for 3 seconds
-                        }
-                        break;
-                    case InputKeyBack:
-                        // Exit app
-                        state->running = false;
-                        break;
-                    default:
-                        break;
-                }
-            }
+        /* Process input events (with timeout for periodic updates) */
+        if(furi_message_queue_get(event_queue, &event, UPDATE_INTERVAL_MS) == FuriStatusOk) {
+            process_input(state, &event);
         }
     }
 
-    // Cleanup - restore default backlight behavior
+    /* Cleanup: restore default backlight behavior */
     notification_message(notification, &sequence_display_backlight_on);
     furi_record_close(RECORD_NOTIFICATION);
 
+    /* Remove from GUI */
     gui_remove_view_port(gui, view_port);
     furi_record_close(RECORD_GUI);
 
+    /* Free resources */
     view_port_free(view_port);
     furi_message_queue_free(event_queue);
-    free(state);
+    state_free(state);
 
     return 0;
 }
