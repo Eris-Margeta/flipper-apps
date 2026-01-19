@@ -1,0 +1,17 @@
+[project]
+name = "flipper-big-clock"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "habibi9325",email = "eris.margeta@gmail.com"}
+]
+readme = "README.md"
+requires-python = "^3.12"
+dependencies = [
+    "ufbt (>=0.2.6,<0.3.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
