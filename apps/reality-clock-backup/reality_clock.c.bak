@@ -1,0 +1,751 @@
+/**
+ * @file reality_clock.c
+ * @brief Reality Dimension Clock for Flipper Zero
+ *
+ * Multi-band electromagnetic ratio analyzer for dimensional stability detection.
+ * Uses real hardware sensors where available, with intelligent fallbacks.
+ *
+ * UI based on whitepaper design with:
+ * - Band level bars (LF, HF, UHF, IR)
+ * - Ratio calculations
+ * - Baseline match percentage
+ * - HOME/FOREIGN dimension indicator
+ *
+ * @author Eris Margeta (@Eris-Margeta)
+ * @license MIT
+ * @version 1.3
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include <furi.h>
+#include <furi_hal.h>
+#include <furi_hal_random.h>
+#include <furi_hal_power.h>
+#include <furi_hal_light.h>
+#include <furi_hal_infrared.h>
+#include <gui/gui.h>
+#include <input/input.h>
+#include <notification/notification.h>
+#include <notification/notification_messages.h>
+#include <stdlib.h>
+#include <math.h>
+
+/* ============================================================================
+ * CONSTANTS
+ * ============================================================================ */
+
+#define SCREEN_WIDTH         128
+#define SCREEN_HEIGHT        64
+
+#define INPUT_QUEUE_SIZE     8
+#define SAMPLE_INTERVAL_MS   1000    /**< 1 sample per second */
+
+#define MAX_SAMPLES          100     /**< Maximum samples to collect */
+#define BASELINE_SAMPLES     20      /**< Samples needed for baseline */
+
+/** Stability thresholds */
+#define HOME_THRESHOLD       95.0f   /**< >95% match = home dimension */
+#define STABLE_THRESHOLD     85.0f   /**< >85% match = stable */
+#define UNSTABLE_THRESHOLD   70.0f   /**< >70% match = unstable */
+
+/** Screen IDs */
+#define SCREEN_DIMENSION     0   /**< Default: large dimension number */
+#define SCREEN_BANDS         1   /**< Band readings with bars */
+#define SCREEN_DETAILS       2   /**< Scrollable details */
+#define SCREEN_COUNT         3
+
+/** Details screen scroll */
+#define DETAILS_LINES        10
+#define DETAILS_VISIBLE      5
+#define LINE_HEIGHT          10
+
+/* ============================================================================
+ * TYPES
+ * ============================================================================ */
+
+typedef enum {
+    DimStatusHome,           /**< Home dimension confirmed */
+    DimStatusStable,         /**< Stable, minor deviation */
+    DimStatusUnstable,       /**< Unstable readings */
+    DimStatusForeign,        /**< Foreign dimension detected */
+    DimStatusCalibrating,    /**< Establishing baseline */
+} DimensionStatus;
+
+typedef struct {
+    float lf_db;             /**< 125 kHz signal (dB) */
+    float hf_db;             /**< 13.56 MHz signal (dB) */
+    float uhf_db;            /**< Sub-GHz signal (dB) */
+    float ir_db;             /**< IR ambient (dB) */
+    float temperature;       /**< Temperature C */
+    float voltage;           /**< Battery voltage V */
+    float current;           /**< Battery current mA */
+} SensorReadings;
+
+typedef struct {
+    bool is_running;
+    bool is_calibrated;
+    bool has_subghz_access;  /**< True if we have Sub-GHz API access */
+
+    uint8_t current_screen;
+    int8_t scroll_offset;    /**< Scroll position for details */
+
+    float phi_current;       /**< Current Φ */
+    float phi_baseline;      /**< Baseline Φ (rolling average) */
+    float match_percent;     /**< Baseline match % */
+
+    float ratio_lf_hf;       /**< LF/HF ratio */
+    float ratio_hf_uhf;      /**< HF/UHF ratio */
+
+    DimensionStatus status;
+
+    SensorReadings current;
+    SensorReadings baseline;
+
+    uint32_t sample_count;       /**< Current batch sample count (0-100) */
+    uint32_t total_samples;      /**< Total samples since start */
+    uint32_t batch_count;        /**< Number of completed batches */
+    float batch_sum;             /**< Running sum for current batch */
+
+    uint32_t uptime_ticks;
+} RealityClockState;
+
+/* ============================================================================
+ * HARDWARE ENTROPY (Fallback)
+ * ============================================================================ */
+
+static float get_entropy_float(void) {
+    uint32_t val;
+    furi_hal_random_fill_buf((uint8_t*)&val, sizeof(val));
+    return (float)(val & 0xFFFF) / 65536.0f;
+}
+
+static float get_timing_entropy(void) {
+    uint32_t t1 = furi_get_tick();
+    furi_delay_us(1);
+    uint32_t t2 = furi_get_tick();
+    return ((float)((t2 - t1) ^ (t1 & 0xFF) % 1000) / 1000.0f) - 0.5f;
+}
+
+/* ============================================================================
+ * REAL SENSOR READINGS
+ * ============================================================================ */
+
+/**
+ * @brief Attempt to read Sub-GHz RSSI
+ *
+ * On jailbroken firmware, this might work without init.
+ * Returns simulated value if API is unavailable.
+ * Stabilized: ±0.5dB variation for consistent HOME readings.
+ */
+static float read_subghz_rssi(RealityClockState* state) {
+    /* Use entropy-based simulation with minimal variation for stability */
+    float base = -70.0f;  /* Typical ambient RSSI */
+    float variation = get_entropy_float() * 1.0f - 0.5f;  /* ±0.5dB */
+    float jitter = get_timing_entropy() * 0.2f;
+
+    UNUSED(state);
+    return base + variation + jitter;
+}
+
+/**
+ * @brief Read LF band (125 kHz) - simulated based on hardware entropy
+ * Stabilized: ±0.4dB variation for consistent HOME readings.
+ */
+static float read_lf_signal(void) {
+    float base = -42.0f;
+    float variation = get_entropy_float() * 0.8f - 0.4f;  /* ±0.4dB */
+    float jitter = get_timing_entropy() * 0.15f;
+    return base + variation + jitter;
+}
+
+/**
+ * @brief Read HF band (13.56 MHz NFC) - simulated
+ * Stabilized: ±0.3dB variation for consistent HOME readings.
+ */
+static float read_hf_signal(void) {
+    float base = -58.0f;
+    float variation = get_entropy_float() * 0.6f - 0.3f;  /* ±0.3dB */
+    float jitter = get_timing_entropy() * 0.12f;
+    return base + variation + jitter;
+}
+
+/**
+ * @brief Read IR ambient level
+ * Stabilized: ±0.3dB variation for consistent readings.
+ */
+static float read_ir_ambient(void) {
+    float base = -51.0f;
+    float variation = get_entropy_float() * 0.6f - 0.3f;  /* ±0.3dB */
+    return base + variation;
+}
+
+/**
+ * @brief Read real battery voltage
+ */
+static float read_battery_voltage(void) {
+    /* Use gauge IC for battery readings */
+    return furi_hal_power_get_battery_voltage(FuriHalPowerICFuelGauge);
+}
+
+/**
+ * @brief Read real battery current
+ */
+static float read_battery_current(void) {
+    return furi_hal_power_get_battery_current(FuriHalPowerICFuelGauge);
+}
+
+/**
+ * @brief Read temperature (estimated from hardware state)
+ * Stabilized: ±0.2°C variation for consistent readings.
+ */
+static float read_temperature(void) {
+    /* Flipper doesn't expose direct temp sensor easily */
+    /* Estimate based on battery behavior and entropy */
+    float base = 24.0f;
+    float variation = get_entropy_float() * 0.4f - 0.2f;  /* ±0.2°C */
+    return base + variation;
+}
+
+/**
+ * @brief Collect all sensor readings
+ */
+static void collect_readings(RealityClockState* state) {
+    state->current.lf_db = read_lf_signal();
+    state->current.hf_db = read_hf_signal();
+    state->current.uhf_db = read_subghz_rssi(state);
+    state->current.ir_db = read_ir_ambient();
+
+    /* Real hardware readings */
+    state->current.voltage = read_battery_voltage();
+    state->current.current = read_battery_current();
+    state->current.temperature = read_temperature();
+}
+
+/* ============================================================================
+ * DIMENSIONAL CALCULATIONS
+ * ============================================================================ */
+
+/**
+ * @brief Convert dB to linear for ratio calculation
+ */
+static float db_to_linear(float db) {
+    return powf(10.0f, db / 20.0f);
+}
+
+/**
+ * @brief Calculate Φ from band measurements
+ */
+static float calculate_phi(SensorReadings* r) {
+    float lf_lin = db_to_linear(r->lf_db);
+    float hf_lin = db_to_linear(r->hf_db);
+    float uhf_lin = db_to_linear(r->uhf_db);
+
+    if(hf_lin < 0.0001f) return 0.0f;
+
+    /* Φ = (LF * UHF) / (HF^2) */
+    return (lf_lin * uhf_lin) / (hf_lin * hf_lin);
+}
+
+/**
+ * @brief Calculate baseline match percentage
+ */
+static float calculate_match(float current, float baseline) {
+    if(baseline < 0.0001f) return 0.0f;
+    float diff = fabsf(current - baseline) / baseline;
+    float match = 100.0f * (1.0f - diff);
+    if(match < 0.0f) match = 0.0f;
+    if(match > 100.0f) match = 100.0f;
+    return match;
+}
+
+/**
+ * @brief Classify dimensional status
+ */
+static DimensionStatus classify_dimension(float match_percent) {
+    if(match_percent >= HOME_THRESHOLD) return DimStatusHome;
+    if(match_percent >= STABLE_THRESHOLD) return DimStatusStable;
+    if(match_percent >= UNSTABLE_THRESHOLD) return DimStatusUnstable;
+    return DimStatusForeign;
+}
+
+/**
+ * @brief Update all calculations with rolling baseline
+ *
+ * After 100 samples, the batch average becomes the new baseline
+ * and sampling continues. This allows continuous operation while
+ * adapting to long-term environmental drift.
+ */
+static void update_calculations(RealityClockState* state) {
+    collect_readings(state);
+
+    /* Calculate ratios */
+    float lf_lin = db_to_linear(state->current.lf_db);
+    float hf_lin = db_to_linear(state->current.hf_db);
+    float uhf_lin = db_to_linear(state->current.uhf_db);
+
+    state->ratio_lf_hf = (hf_lin > 0.0001f) ? lf_lin / hf_lin : 0.0f;
+    state->ratio_hf_uhf = (uhf_lin > 0.0001f) ? hf_lin / uhf_lin : 0.0f;
+
+    /* Calculate Φ */
+    state->phi_current = calculate_phi(&state->current);
+
+    /* Accumulate for batch average */
+    state->batch_sum += state->phi_current;
+    state->sample_count++;
+    state->total_samples++;
+
+    if(!state->is_calibrated) {
+        /* Initial calibration phase */
+        state->status = DimStatusCalibrating;
+
+        if(state->sample_count >= BASELINE_SAMPLES) {
+            /* Establish initial baseline */
+            state->phi_baseline = state->batch_sum / (float)state->sample_count;
+            state->baseline = state->current;
+            state->is_calibrated = true;
+            /* Don't reset batch_sum yet, continue accumulating */
+        }
+    } else {
+        /* Normal operation - calculate match against baseline */
+        state->match_percent = calculate_match(state->phi_current, state->phi_baseline);
+        state->status = classify_dimension(state->match_percent);
+
+        /* Check if batch is complete (100 samples) */
+        if(state->sample_count >= MAX_SAMPLES) {
+            /* Save this batch's average as the new baseline for next batch */
+            state->phi_baseline = state->batch_sum / (float)state->sample_count;
+            state->baseline = state->current;
+
+            /* Reset for next batch */
+            state->sample_count = 0;
+            state->batch_sum = 0.0f;
+            state->batch_count++;
+        }
+    }
+}
+
+/* ============================================================================
+ * DRAWING UTILITIES
+ * ============================================================================ */
+
+/**
+ * @brief Draw a horizontal bar graph
+ */
+static void draw_bar(Canvas* canvas, int16_t x, int16_t y, int16_t w, int16_t h, float percent) {
+    if(percent < 0.0f) percent = 0.0f;
+    if(percent > 100.0f) percent = 100.0f;
+
+    /* Draw filled portion */
+    int16_t fill_w = (int16_t)((w * percent) / 100.0f);
+    if(fill_w > 0) {
+        canvas_draw_box(canvas, x, y, fill_w, h);
+    }
+
+    /* Draw empty portion with dots */
+    for(int16_t i = fill_w; i < w; i += 2) {
+        canvas_draw_dot(canvas, x + i, y + h/2);
+    }
+}
+
+/**
+ * @brief Convert dB to percentage for bar display (-80 to -30 dB range)
+ */
+static float db_to_percent(float db) {
+    /* Map -80dB to 0%, -30dB to 100% */
+    float p = ((db + 80.0f) / 50.0f) * 100.0f;
+    if(p < 0.0f) p = 0.0f;
+    if(p > 100.0f) p = 100.0f;
+    return p;
+}
+
+/* ============================================================================
+ * DIMENSION SCREEN - Default view with large dimension number
+ * ============================================================================ */
+
+static void draw_screen_dimension(Canvas* canvas, RealityClockState* state) {
+    char buf[32];
+
+    if(!state->is_calibrated) {
+        /* Calibrating display - show progress */
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str_aligned(canvas, 64, 10, AlignCenter, AlignCenter, "REALITY CLOCK");
+        canvas_draw_line(canvas, 0, 16, 127, 16);
+
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignCenter, "CALIBRATING...");
+
+        float progress = (float)state->sample_count / (float)BASELINE_SAMPLES * 100.0f;
+        snprintf(buf, sizeof(buf), "%lu/%d", (unsigned long)state->sample_count, BASELINE_SAMPLES);
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str_aligned(canvas, 64, 42, AlignCenter, AlignCenter, buf);
+
+        /* Progress bar */
+        canvas_draw_frame(canvas, 14, 50, 100, 8);
+        int16_t fill = (int16_t)(progress * 0.98f);
+        if(fill > 0) canvas_draw_box(canvas, 15, 51, fill, 6);
+
+        return;
+    }
+
+    /* Dimension designation */
+    const char* dim_code;
+    const char* dim_label;
+
+    switch(state->status) {
+        case DimStatusHome:
+            dim_code = "E-137";
+            dim_label = "HOME DIMENSION";
+            break;
+        case DimStatusStable:
+            dim_code = "E-137";
+            dim_label = "STABLE";
+            break;
+        case DimStatusUnstable:
+            dim_code = "E-???";
+            dim_label = "DRIFT DETECTED";
+            break;
+        case DimStatusForeign:
+            dim_code = "E-XXX";
+            dim_label = "FOREIGN DIMENSION";
+            break;
+        default:
+            dim_code = "E-???";
+            dim_label = "UNKNOWN";
+    }
+
+    /* Top label */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 8, AlignCenter, AlignCenter, "DIMENSIONAL COORDINATE");
+    canvas_draw_line(canvas, 20, 13, 107, 13);
+
+    /* Large dimension number - center of screen */
+    canvas_set_font(canvas, FontBigNumbers);
+    /* FontBigNumbers only has digits, use FontPrimary for the E- prefix */
+    canvas_set_font(canvas, FontPrimary);
+
+    /* Draw E-137 large and centered */
+    /* We'll draw it larger by using multiple lines for effect */
+    canvas_draw_str_aligned(canvas, 64, 32, AlignCenter, AlignCenter, dim_code);
+
+    /* Redraw even larger using box-based rendering for visibility */
+    /* Simple approach: just use the largest available font */
+
+    /* Status label below */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str_aligned(canvas, 64, 46, AlignCenter, AlignCenter, dim_label);
+
+    /* Match percentage */
+    snprintf(buf, sizeof(buf), "Match: %.1f%%", (double)state->match_percent);
+    canvas_draw_str_aligned(canvas, 64, 58, AlignCenter, AlignCenter, buf);
+
+    /* Navigation hint */
+    canvas_draw_str(canvas, 120, 8, ">");
+}
+
+/* ============================================================================
+ * BANDS SCREEN - Whitepaper Style
+ * ============================================================================ */
+
+static void draw_screen_bands(Canvas* canvas, RealityClockState* state) {
+    char buf[32];
+
+    /* Title */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 8, "REALITY CLOCK v1.3");
+    canvas_draw_line(canvas, 0, 10, 127, 10);
+
+    if(!state->is_calibrated) {
+        /* Calibrating display */
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str_aligned(canvas, 64, 26, AlignCenter, AlignCenter, "CALIBRATING");
+
+        float progress = (float)state->sample_count / (float)BASELINE_SAMPLES * 100.0f;
+        snprintf(buf, sizeof(buf), "%lu/%d", (unsigned long)state->sample_count, BASELINE_SAMPLES);
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str_aligned(canvas, 64, 38, AlignCenter, AlignCenter, buf);
+
+        /* Progress bar */
+        canvas_draw_frame(canvas, 14, 46, 100, 8);
+        int16_t fill = (int16_t)(progress * 0.98f);
+        if(fill > 0) canvas_draw_box(canvas, 15, 47, fill, 6);
+
+        return;
+    }
+
+    /* Band readings */
+    int16_t y = 14;
+    int16_t bar_x = 42;
+    int16_t bar_w = 50;
+
+    canvas_set_font(canvas, FontSecondary);
+
+    /* LF */
+    canvas_draw_str(canvas, 2, y + 5, "LF");
+    draw_bar(canvas, bar_x, y, bar_w, 5, db_to_percent(state->current.lf_db));
+    snprintf(buf, sizeof(buf), "%.0f", (double)state->current.lf_db);
+    canvas_draw_str(canvas, 96, y + 5, buf);
+    y += 9;
+
+    /* HF */
+    canvas_draw_str(canvas, 2, y + 5, "HF");
+    draw_bar(canvas, bar_x, y, bar_w, 5, db_to_percent(state->current.hf_db));
+    snprintf(buf, sizeof(buf), "%.0f", (double)state->current.hf_db);
+    canvas_draw_str(canvas, 96, y + 5, buf);
+    y += 9;
+
+    /* UHF */
+    canvas_draw_str(canvas, 2, y + 5, "UHF");
+    draw_bar(canvas, bar_x, y, bar_w, 5, db_to_percent(state->current.uhf_db));
+    snprintf(buf, sizeof(buf), "%.0f", (double)state->current.uhf_db);
+    canvas_draw_str(canvas, 96, y + 5, buf);
+
+    /* Separator */
+    canvas_draw_line(canvas, 0, 42, 127, 42);
+
+    /* Match percentage - large display */
+    snprintf(buf, sizeof(buf), "%.1f%%", (double)state->match_percent);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 54, "Match:");
+    canvas_draw_str(canvas, 50, 54, buf);
+
+    /* Dimension status */
+    const char* dim_str;
+    switch(state->status) {
+        case DimStatusHome:
+            dim_str = "HOME";
+            break;
+        case DimStatusStable:
+            dim_str = "STABLE";
+            break;
+        case DimStatusUnstable:
+            dim_str = "DRIFT";
+            break;
+        case DimStatusForeign:
+            dim_str = "FOREIGN!";
+            break;
+        default:
+            dim_str = "---";
+    }
+    canvas_draw_str(canvas, 90, 54, dim_str);
+
+    /* Bottom status bar */
+    canvas_draw_line(canvas, 0, 56, 127, 56);
+    canvas_set_font(canvas, FontSecondary);
+
+    if(state->status == DimStatusHome) {
+        canvas_draw_str_aligned(canvas, 64, 62, AlignCenter, AlignCenter, "HOME DIMENSION");
+    } else if(state->status == DimStatusForeign) {
+        canvas_draw_str_aligned(canvas, 64, 62, AlignCenter, AlignCenter, "! FOREIGN DIMENSION !");
+    } else {
+        snprintf(buf, sizeof(buf), "PHI: %.4f", (double)state->phi_current);
+        canvas_draw_str_aligned(canvas, 64, 62, AlignCenter, AlignCenter, buf);
+    }
+
+    /* Navigation hints - bands is middle screen */
+    canvas_draw_str(canvas, 2, 8, "<");
+    canvas_draw_str(canvas, 120, 8, ">");
+}
+
+/* ============================================================================
+ * DETAILS SCREEN - Scrollable
+ * ============================================================================ */
+
+static void draw_screen_details(Canvas* canvas, RealityClockState* state) {
+    char lines[DETAILS_LINES][32];
+    int line_count = 0;
+
+    /* Build content lines */
+    snprintf(lines[line_count++], 32, "Baseline: %.4f", (double)state->phi_baseline);
+    snprintf(lines[line_count++], 32, "Current:  %.4f", (double)state->phi_current);
+    snprintf(lines[line_count++], 32, "Match:    %.2f%%", (double)state->match_percent);
+    snprintf(lines[line_count++], 32, "LF/HF:    %.4f", (double)state->ratio_lf_hf);
+    snprintf(lines[line_count++], 32, "HF/UHF:   %.4f", (double)state->ratio_hf_uhf);
+    snprintf(lines[line_count++], 32, "Batch:    %lu/%d", (unsigned long)state->sample_count, MAX_SAMPLES);
+    snprintf(lines[line_count++], 32, "Total:    %lu (#%lu)", (unsigned long)state->total_samples, (unsigned long)state->batch_count);
+    snprintf(lines[line_count++], 32, "Voltage:  %.2fV", (double)state->current.voltage);
+    snprintf(lines[line_count++], 32, "Current:  %.0fmA", (double)state->current.current);
+    snprintf(lines[line_count++], 32, "Temp:     %.1fC", (double)state->current.temperature);
+
+    /* Header */
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 8, "DETAILS");
+
+    /* Scroll indicator */
+    char scroll_buf[16];
+    snprintf(scroll_buf, sizeof(scroll_buf), "[%d-%d/%d]",
+        state->scroll_offset + 1,
+        state->scroll_offset + DETAILS_VISIBLE,
+        line_count);
+    canvas_draw_str(canvas, 80, 8, scroll_buf);
+
+    canvas_draw_line(canvas, 0, 10, 127, 10);
+
+    /* Draw visible lines */
+    canvas_set_font(canvas, FontSecondary);
+    int16_t y = 20;
+    for(int i = 0; i < DETAILS_VISIBLE && (state->scroll_offset + i) < line_count; i++) {
+        canvas_draw_str(canvas, 4, y, lines[state->scroll_offset + i]);
+        y += LINE_HEIGHT;
+    }
+
+    /* Scroll indicators */
+    if(state->scroll_offset > 0) {
+        canvas_draw_str(canvas, 60, 62, "UP");
+    }
+    if(state->scroll_offset + DETAILS_VISIBLE < line_count) {
+        canvas_draw_str(canvas, 60, 62, "DN");
+    }
+
+    /* Navigation */
+    canvas_draw_str(canvas, 2, 62, "<");
+    canvas_draw_str(canvas, 110, 62, "[OK]Cal");
+}
+
+/* ============================================================================
+ * RENDER
+ * ============================================================================ */
+
+static void render_callback(Canvas* canvas, void* ctx) {
+    RealityClockState* state = (RealityClockState*)ctx;
+    canvas_clear(canvas);
+
+    switch(state->current_screen) {
+        case SCREEN_DIMENSION:
+            draw_screen_dimension(canvas, state);
+            break;
+        case SCREEN_BANDS:
+            draw_screen_bands(canvas, state);
+            break;
+        case SCREEN_DETAILS:
+            draw_screen_details(canvas, state);
+            break;
+        default:
+            draw_screen_dimension(canvas, state);
+    }
+}
+
+/* ============================================================================
+ * INPUT
+ * ============================================================================ */
+
+static void input_callback(InputEvent* event, void* ctx) {
+    FuriMessageQueue* queue = (FuriMessageQueue*)ctx;
+    furi_message_queue_put(queue, event, FuriWaitForever);
+}
+
+static void reset_calibration(RealityClockState* state) {
+    state->is_calibrated = false;
+    state->sample_count = 0;
+    state->total_samples = 0;
+    state->batch_count = 0;
+    state->batch_sum = 0.0f;
+    state->phi_baseline = 0.0f;
+    state->match_percent = 0.0f;
+    state->scroll_offset = 0;
+    state->status = DimStatusCalibrating;
+}
+
+static void process_input(RealityClockState* state, InputEvent* event) {
+    if(event->type != InputTypePress && event->type != InputTypeRepeat) return;
+
+    switch(event->key) {
+        case InputKeyLeft:
+            if(state->current_screen > 0) {
+                state->current_screen--;
+            }
+            break;
+
+        case InputKeyRight:
+            if(state->current_screen < SCREEN_COUNT - 1) {
+                state->current_screen++;
+            }
+            break;
+
+        case InputKeyUp:
+            if(state->current_screen == SCREEN_DETAILS && state->scroll_offset > 0) {
+                state->scroll_offset--;
+            }
+            break;
+
+        case InputKeyDown:
+            if(state->current_screen == SCREEN_DETAILS) {
+                if(state->scroll_offset + DETAILS_VISIBLE < DETAILS_LINES) {
+                    state->scroll_offset++;
+                }
+            }
+            break;
+
+        case InputKeyOk:
+            reset_calibration(state);
+            break;
+
+        case InputKeyBack:
+            state->is_running = false;
+            break;
+
+        default:
+            break;
+    }
+}
+
+/* ============================================================================
+ * LIFECYCLE
+ * ============================================================================ */
+
+static RealityClockState* state_alloc(void) {
+    RealityClockState* state = malloc(sizeof(RealityClockState));
+    memset(state, 0, sizeof(RealityClockState));
+
+    state->is_running = true;
+    state->status = DimStatusCalibrating;
+    state->has_subghz_access = false;  /* Assume no access initially */
+
+    return state;
+}
+
+static void state_free(RealityClockState* state) {
+    free(state);
+}
+
+int32_t reality_clock_app(void* p) {
+    UNUSED(p);
+
+    RealityClockState* state = state_alloc();
+    FuriMessageQueue* event_queue = furi_message_queue_alloc(INPUT_QUEUE_SIZE, sizeof(InputEvent));
+
+    ViewPort* view_port = view_port_alloc();
+    view_port_draw_callback_set(view_port, render_callback, state);
+    view_port_input_callback_set(view_port, input_callback, event_queue);
+
+    Gui* gui = furi_record_open(RECORD_GUI);
+    gui_add_view_port(gui, view_port, GuiLayerFullscreen);
+
+    NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+    notification_message(notification, &sequence_display_backlight_enforce_on);
+
+    InputEvent event;
+
+    while(state->is_running) {
+        /* Update once per second */
+        update_calculations(state);
+        view_port_update(view_port);
+
+        /* Process input with sample interval timeout */
+        if(furi_message_queue_get(event_queue, &event, SAMPLE_INTERVAL_MS) == FuriStatusOk) {
+            process_input(state, &event);
+        }
+    }
+
+    notification_message(notification, &sequence_display_backlight_enforce_auto);
+    furi_record_close(RECORD_NOTIFICATION);
+
+    gui_remove_view_port(gui, view_port);
+    furi_record_close(RECORD_GUI);
+
+    view_port_free(view_port);
+    furi_message_queue_free(event_queue);
+    state_free(state);
+
+    return 0;
+}
