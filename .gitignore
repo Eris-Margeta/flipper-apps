@@ -1,0 +1,38 @@
+# Build artifacts
+dist/
+build/
+*.fap
+*.elf
+*.o
+*.d
+
+# ufbt
+.ufbt/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+Thumbs.db
+
+# Compiled files
+compile_commands.json
