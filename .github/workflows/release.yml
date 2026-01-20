@@ -1,0 +1,223 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'                    # Monorepo release (v2024.01, v1.0.0)
+      - '*-v*'                  # App-specific tags (reality-clock-v4.0)
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write           # Required for creating releases
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ufbt
+        run: pip install ufbt
+
+      - name: Determine release type
+        id: release-type
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Check if this is an app-specific tag (contains -v)
+          if [[ "$TAG" == *-v* ]]; then
+            # Extract app name (everything before -v)
+            APP_NAME=$(echo "$TAG" | sed 's/-v.*//')
+            # Extract version (everything after -v, without pre-release suffix)
+            TAG_VERSION=$(echo "$TAG" | sed 's/.*-v//' | sed 's/-.*//')
+
+            echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
+            echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+            echo "release_type=app" >> $GITHUB_OUTPUT
+            echo "Detected app-specific release for: $APP_NAME (version: $TAG_VERSION)"
+          else
+            echo "app_name=" >> $GITHUB_OUTPUT
+            echo "tag_version=" >> $GITHUB_OUTPUT
+            echo "release_type=monorepo" >> $GITHUB_OUTPUT
+            echo "Detected monorepo release (all apps)"
+          fi
+
+          # Detect pre-release
+          if [[ "$TAG" == *-alpha* ]] || [[ "$TAG" == *-beta* ]] || [[ "$TAG" == *-rc* ]] || [[ "$TAG" == *-dev* ]] || [[ "$TAG" == *-nightly* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "Detected pre-release tag"
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate version (app-specific releases)
+        if: steps.release-type.outputs.release_type == 'app'
+        run: |
+          APP_NAME="${{ steps.release-type.outputs.app_name }}"
+          TAG_VERSION="${{ steps.release-type.outputs.tag_version }}"
+          APP_DIR="apps/${APP_NAME}"
+
+          echo "Validating version for ${APP_NAME}..."
+
+          # Check if app directory exists
+          if [ ! -d "$APP_DIR" ]; then
+            echo "❌ ERROR: App directory not found: $APP_DIR"
+            echo "Available apps:"
+            ls -1 apps/
+            exit 1
+          fi
+
+          # Get version from VERSION file
+          if [ -f "${APP_DIR}/VERSION" ]; then
+            FILE_VERSION=$(cat "${APP_DIR}/VERSION" | tr -d '[:space:]')
+          else
+            # Fallback to application.fam
+            FILE_VERSION=$(grep -oP 'fap_version\s*=\s*"\K[^"]+' "${APP_DIR}/application.fam" || echo "")
+          fi
+
+          echo "Tag version: $TAG_VERSION"
+          echo "VERSION file: $FILE_VERSION"
+
+          # Validate match
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo ""
+            echo "❌ VERSION MISMATCH"
+            echo "Tag says: $TAG_VERSION"
+            echo "VERSION file says: $FILE_VERSION"
+            echo ""
+            echo "Please ensure VERSION file matches your tag before releasing."
+            echo "Example: If tagging 'reality-clock-v4.1', VERSION should contain '4.1'"
+            exit 1
+          fi
+
+          echo "✅ Version validated: $TAG_VERSION"
+
+      - name: Build apps
+        run: |
+          mkdir -p release-artifacts
+          RELEASE_TYPE="${{ steps.release-type.outputs.release_type }}"
+          TARGET_APP="${{ steps.release-type.outputs.app_name }}"
+
+          for app_dir in apps/*/; do
+            if [ -f "${app_dir}application.fam" ]; then
+              app_name=$(basename "${app_dir}")
+
+              # Skip template
+              if [ "$app_name" = "_template" ]; then
+                continue
+              fi
+
+              # For app-specific releases, only build the target app
+              if [ "$RELEASE_TYPE" = "app" ] && [ "$app_name" != "$TARGET_APP" ]; then
+                echo "Skipping ${app_name} (not target app)"
+                continue
+              fi
+
+              echo "Building ${app_name}..."
+              cd "${app_dir}"
+              ufbt
+
+              # Get version from VERSION file or application.fam
+              if [ -f "VERSION" ]; then
+                version=$(cat VERSION | tr -d '[:space:]')
+              else
+                version=$(grep -oP 'fap_version\s*=\s*"\K[^"]+' application.fam || echo "unknown")
+              fi
+
+              # Copy .fap to release artifacts with version in filename
+              if [ -f "dist/${app_name}.fap" ]; then
+                cp "dist/${app_name}.fap" "../../release-artifacts/${app_name}-v${version}.fap"
+                echo "  -> ${app_name}-v${version}.fap"
+              fi
+
+              cd - > /dev/null
+            fi
+          done
+
+          echo ""
+          echo "Release artifacts:"
+          ls -la release-artifacts/
+
+          # Fail if no artifacts were created
+          if [ -z "$(ls -A release-artifacts/)" ]; then
+            echo "❌ ERROR: No release artifacts created"
+            exit 1
+          fi
+
+      - name: Generate release notes
+        run: |
+          TAG="${{ steps.release-type.outputs.tag }}"
+          RELEASE_TYPE="${{ steps.release-type.outputs.release_type }}"
+          TARGET_APP="${{ steps.release-type.outputs.app_name }}"
+          PRERELEASE="${{ steps.release-type.outputs.prerelease }}"
+
+          if [ "$RELEASE_TYPE" = "app" ]; then
+            echo "## ${TARGET_APP} Release" > release-notes.md
+            echo "" >> release-notes.md
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "⚠️ **Pre-release** - This is a development/testing release." >> release-notes.md
+              echo "" >> release-notes.md
+            fi
+            echo "App-specific release for **${TARGET_APP}**" >> release-notes.md
+
+            # Include app changelog if exists
+            if [ -f "apps/${TARGET_APP}/changelog.md" ]; then
+              echo "" >> release-notes.md
+              echo "### Changelog" >> release-notes.md
+              echo "" >> release-notes.md
+              # Get the latest version section from changelog
+              awk '/^## \[/{if(p) exit; p=1} p' "apps/${TARGET_APP}/changelog.md" >> release-notes.md
+            fi
+          else
+            echo "## Flipper Zero Apps - Stable Bundle" > release-notes.md
+            echo "" >> release-notes.md
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "⚠️ **Pre-release** - This is a development/testing release." >> release-notes.md
+              echo "" >> release-notes.md
+            fi
+            echo "Monorepo release including all apps at their current stable versions." >> release-notes.md
+          fi
+
+          echo "" >> release-notes.md
+          echo "### Included Apps" >> release-notes.md
+          echo "" >> release-notes.md
+
+          for fap in release-artifacts/*.fap; do
+            if [ -f "$fap" ]; then
+              filename=$(basename "$fap")
+              echo "- **${filename}**" >> release-notes.md
+            fi
+          done
+
+          echo "" >> release-notes.md
+          echo "### Installation" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "1. Download the \`.fap\` file for your desired app" >> release-notes.md
+          echo "2. Connect your Flipper Zero via USB" >> release-notes.md
+          echo "3. Copy the \`.fap\` file to \`/ext/apps/Tools/\` on your Flipper" >> release-notes.md
+          echo "4. Or use qFlipper to drag and drop the file" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Tested Firmware" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "| Firmware | Version | Status |" >> release-notes.md
+          echo "|----------|---------|--------|" >> release-notes.md
+          echo "| Official Flipper | 1.43 | ✅ Works |" >> release-notes.md
+          echo "| Momentum | mntm-012 | ✅ Works |" >> release-notes.md
+          echo "| Unleashed | - | ❓ Not tested |" >> release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/*.fap
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ steps.release-type.outputs.prerelease == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
