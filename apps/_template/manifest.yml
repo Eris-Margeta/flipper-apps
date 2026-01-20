@@ -1,0 +1,14 @@
+# Flipper App Catalog Manifest
+# Update this file before submitting to the catalog
+
+sourcecode:
+  type: git
+  location:
+    origin: https://github.com/<your-username>/flipper-apps.git
+    commit_sha: PENDING_COMMIT_HASH  # Update after merging to main
+    subdir: apps/<app-name>
+description: "@README.md"
+changelog: "@changelog.md"
+screenshots:
+  - screenshots/screenshot1.png
+  # Add more screenshots as needed
