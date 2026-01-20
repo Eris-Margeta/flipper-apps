@@ -2,7 +2,7 @@ sourcecode:
   type: git
   location:
     origin: https://github.com/Eris-Margeta/flipper-apps.git
-    commit_sha: e0a47ce344556e908de6bf2e6767f8ee0e24d4e9
+    commit_sha: f992d88e5d6d622612e56130bff86fd414e9c7d0
     subdir: apps/reality-clock
 description: "@README.md"
 changelog: "@changelog.md"
