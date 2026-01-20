@@ -11,7 +11,7 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 | App | Description | Version | Category |
 |-----|-------------|---------|----------|
 | [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | 1.1 | Tools |
-| [Reality Clock](apps/reality-clock/) | Real dimensional stability monitor using CC1101 multi-band RSSI analysis | 3.0 | Tools |
+| [Reality Clock](apps/reality-clock/) | Real dimensional stability monitor using CC1101 multi-band RSSI analysis | 4.0 | Tools |
 
 ## Quick Start
 
@@ -196,9 +196,166 @@ apps/<app-name>/
 └── screenshots/         # qFlipper screenshots
 ```
 
-## Publishing to Flipper Catalog
+## Publishing to Flipper App Catalog
 
-See [docs/PUBLISHING.md](docs/PUBLISHING.md) for instructions on publishing apps to the official Flipper App Catalog.
+Follow this workflow to develop and submit apps to the [official Flipper App Catalog](https://github.com/flipperdevices/flipper-application-catalog).
+
+### Development & Submission Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  1. DEVELOP        Create feature branch, implement your app            │
+│         ↓                                                               │
+│  2. PR TO MAIN     Open PR, CI runs automatically to validate build     │
+│         ↓                                                               │
+│  3. MERGE          After review, merge to main branch                   │
+│         ↓                                                               │
+│  4. TAG            Create version tag: git tag appname-v1.0             │
+│         ↓                                                               │
+│  5. PUSH TAG       Push tag: git push origin appname-v1.0               │
+│         ↓                                                               │
+│  6. RELEASE        GitHub Action builds app, creates release with .fap  │
+│         ↓                                                               │
+│  7. SUBMIT         PR to flipper-application-catalog with commit hash   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step-by-Step Guide
+
+**1. Develop on a feature branch**
+```bash
+git checkout -b feat/my-new-app
+# ... develop your app ...
+```
+
+**2. Open PR to main**
+- CI workflow runs automatically on PRs
+- Validates build, checks file structure, verifies version consistency
+- Green CI = safe to merge
+
+**3. Merge to main**
+- After code review and CI passes, merge your PR
+- Your code is now on the stable `main` branch
+
+**4-5. Create and push a version tag**
+```bash
+git checkout main
+git pull origin main
+git tag reality-clock-v4.0    # App-specific tag
+git push origin reality-clock-v4.0
+```
+
+**6. GitHub Release is created automatically**
+- Release workflow triggers on tag push
+- Builds the app and uploads `.fap` file as release asset
+- Release notes generated automatically
+
+**7. Submit to Flipper App Catalog**
+```bash
+# Get the commit hash from main
+git rev-parse HEAD
+```
+
+Then submit a PR to [flipper-application-catalog](https://github.com/flipperdevices/flipper-application-catalog) with your `manifest.yml` pointing to that commit hash.
+
+### Why Submit from Main?
+
+The Flipper App Catalog clones your repo at the specific commit hash in your manifest. That commit **must be on a public, stable branch** (main). If you reference a commit from a feature branch that gets deleted or rebased, the catalog build will break.
+
+### Versioning Strategy
+
+This monorepo supports two release types that can coexist:
+
+| Release Type | Purpose | Example Tags |
+|--------------|---------|--------------|
+| **App-specific** | Individual app updates | `reality-clock-v4.0`, `big-clock-v1.2-beta` |
+| **Monorepo bundle** | Coordinated stable release | `v2024.01`, `v1.0.0` |
+
+**Recommended workflow:**
+```
+reality-clock-v4.0        # Stable release of reality-clock
+reality-clock-v4.1-beta   # Beta testing new features
+reality-clock-v4.1        # Promote beta to stable
+v2024.02                  # Stable bundle (all apps known-good)
+```
+
+### Tag Naming Convention
+
+**App-specific releases:**
+```
+<app-folder-name>-v<version>[-prerelease]
+
+Examples:
+  reality-clock-v4.0          # Stable release
+  reality-clock-v4.1-beta     # Beta release
+  reality-clock-v4.1-rc1      # Release candidate
+  big-clock-v1.2-alpha        # Alpha release
+  big-clock-v1.2-nightly      # Nightly build
+```
+
+**Monorepo releases:**
+```
+v<version>[-prerelease]
+
+Examples:
+  v2024.01                    # January 2024 stable bundle
+  v1.0.0                      # Semantic version stable
+  v2024.02-beta               # Beta bundle
+```
+
+### Version Validation
+
+The release workflow **validates that your tag matches the VERSION file**:
+
+```
+Tag: reality-clock-v4.0
+VERSION file: 4.0
+✅ Match - release proceeds
+
+Tag: reality-clock-v4.1
+VERSION file: 4.0
+❌ Mismatch - release fails
+```
+
+**Before tagging, always update:**
+1. `apps/<app>/VERSION` - The version number
+2. `apps/<app>/application.fam` - The `fap_version` field
+3. `apps/<app>/changelog.md` - Document changes
+
+### Pre-release Tags
+
+Adding these suffixes marks the release as a pre-release on GitHub:
+
+| Suffix | Meaning |
+|--------|---------|
+| `-alpha` | Early development, unstable |
+| `-beta` | Feature complete, testing |
+| `-rc1`, `-rc2` | Release candidate |
+| `-dev` | Development snapshot |
+| `-nightly` | Automated nightly build |
+
+Pre-releases are clearly marked with ⚠️ in the release notes.
+
+### Quick Release Commands
+
+```bash
+# 1. Update version files
+echo "4.1" > apps/reality-clock/VERSION
+# Also update application.fam fap_version="4.1"
+
+# 2. Commit changes
+git add .
+git commit -m "Bump reality-clock to v4.1"
+
+# 3. Create and push tag
+git tag reality-clock-v4.1
+git push origin main
+git push origin reality-clock-v4.1
+
+# 4. GitHub Actions creates the release automatically
+```
+
+See [docs/PUBLISHING.md](docs/PUBLISHING.md) for detailed manifest.yml setup and catalog requirements.
 
 ## Contributing
 

@@ -792,7 +792,7 @@ static void draw_screen_home(Canvas* canvas, RealityClockState* state) {
     const char* status_text;
     switch(state->status) {
         case DimStatusHome:
-            status_text = "[ HOME DIMENSION ]";
+            status_text = "[ HOME ]";
             break;
         case DimStatusStable:
             status_text = "[ STABLE ]";

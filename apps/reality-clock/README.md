@@ -1,12 +1,17 @@
-# Reality Dimension Clock for Flipper Zero
+# Reality Dimension Clock v4.0
+
+> Dimensional stability monitoring using real CC1101 multi-band RSSI analysis
 
 ![Reality Dimension Clock Screenshot](screenshots/screenshot1.png)
 
-A dimensional stability monitoring application that measures electromagnetic ratios across multiple frequency bands to detect anomalies in physical constants.
+[![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)](https://flipperzero.one/)
+[![Version](https://img.shields.io/badge/version-4.0-blue)](../../releases)
+[![Release](https://img.shields.io/github/v/release/Eris-Margeta/flipper-apps?filter=reality-clock-v*&label=release)](https://github.com/Eris-Margeta/flipper-apps/releases?q=reality-clock)
+[![Status](https://img.shields.io/badge/status-real--sensors-brightgreen)]()
 
-![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
-![Version](https://img.shields.io/badge/version-3.0-blue)
-![Status](https://img.shields.io/badge/status-real--sensors-brightgreen)
+## Download
+
+**[⬇️ Download Latest Release](https://github.com/Eris-Margeta/flipper-apps/releases?q=reality-clock)** - Get the `.fap` file and copy to `/ext/apps/Tools/` on your Flipper.
 
 ## Theoretical Basis
 
@@ -84,9 +89,8 @@ Press OK to access the settings menu:
 
 ## Known Issues
 
-### Brightness Flicker
-
-When adjusting brightness or pressing buttons, there may be brief flickers to maximum brightness. This is a limitation of the Flipper Zero's notification system, which overrides direct hardware backlight control on input events. The app uses a high-frequency timer (200Hz) to minimize this effect, but some flicker may still be visible.
+### Brightness Flicker (Fixed)
+Brightness used to flicker before I discovered a way to correctly control it. If you experience some flickers or weird behavior, report it as an issue
 
 ## Display
 
@@ -190,7 +194,7 @@ MIT License - see [LICENSE](../../LICENSE)
 
 To submit to the Flipper Application Catalog, the following items are needed:
 
-- [ ] **Update manifest.yml** - Replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing
+- [x] **Update manifest.yml** - Replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing
 
 ### Ready Items
 
@@ -201,6 +205,17 @@ To submit to the Flipper Application Catalog, the following items are needed:
 - [x] `icon.png` - App icon
 - [x] `paper.html` - Academic paper
 - [x] `screenshots/` - 7 screenshots (screenshot1-7.png)
+
+---
+
+## Tested
+
+| Firmware | Version | Status |
+|----------|---------|--------|
+| Official Flipper | 1.43 | ✅ Works |
+| Momentum | mntm-012 | ✅ Works |
+| Unleashed | - | ❓ Not tested |
+| RogueMaster | - | ⛔ Not supported (firmware too unstable) |
 
 ---
 

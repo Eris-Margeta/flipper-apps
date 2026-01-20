@@ -6,7 +6,7 @@ App(
     stack_size=8 * 1024,
     fap_category="Tools",
     fap_author="@Eris-Margeta",
-    fap_version="2.1",
+    fap_version="4.0",
     fap_description="Dimensional stability monitor using multi-band EM ratio analysis.",
     fap_icon="icon.png",
 )

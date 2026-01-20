@@ -2,6 +2,29 @@
 
 All notable changes to Reality Clock will be documented in this file.
 
+## [4.0] - 2026-01-20
+
+### Fixed
+- **Flicker-Free Brightness Control** - Completely rewrote brightness system
+  - Now uses NightStand Clock approach (by @nymda)
+  - Directly modifies notification app's internal brightness setting
+  - No more 200Hz timer hack or interrupt-context brightness calls
+  - Smooth, flicker-free brightness adjustment
+
+### Changed
+- Simplified status text: "HOME DIMENSION" → "HOME"
+- Removed global brightness variable and timer callback
+- Cleaner input callback (no brightness reapplication in interrupt context)
+- Brightness now properly restored to original value on app exit
+
+### Technical
+- Defined `NotificationAppInternal` struct to access `settings.display_brightness`
+- Uses `sequence_display_backlight_on` to apply brightness after setting
+- Uses `sequence_display_backlight_enforce_on` for always-on mode
+- Properly paired with `sequence_display_backlight_enforce_auto` on exit
+
+---
+
 ## [3.0] - 2026-01-20
 
 ### MAJOR: Real Hardware Sensors
