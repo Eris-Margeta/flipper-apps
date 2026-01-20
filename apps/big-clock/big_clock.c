@@ -22,6 +22,41 @@
 #include <notification/notification_messages.h>
 
 /* ============================================================================
+ * INTERNAL NOTIFICATION STRUCTURES
+ * ============================================================================
+ * These structures are defined here to access internal notification settings
+ * for flicker-free brightness control (same approach as NightStand Clock).
+ * Based on flipperdevices/flipperzero-firmware notification_app.h
+ */
+
+typedef struct {
+    uint8_t value_last[2];
+    uint8_t value[2];
+    uint8_t index;
+    uint8_t light;
+} NotificationLedLayer;
+
+typedef struct {
+    uint8_t version;
+    float display_brightness;
+    float led_brightness;
+    float speaker_volume;
+    uint32_t display_off_delay_ms;
+    int8_t contrast;
+    bool vibro_on;
+} NotificationSettings;
+
+typedef struct {
+    FuriMessageQueue* queue;
+    FuriPubSub* event_record;
+    FuriTimer* display_timer;
+    NotificationLedLayer display;
+    NotificationLedLayer led[3];
+    uint8_t display_led_lock;
+    NotificationSettings settings;
+} NotificationAppInternal;
+
+/* ============================================================================
  * CONSTANTS
  * ============================================================================ */
 
@@ -70,6 +105,8 @@ typedef struct {
     uint8_t brightness;              /**< Brightness level (0-100) */
     uint8_t brightness_indicator;    /**< Countdown timer for brightness UI */
     bool is_running;                 /**< Application run state */
+    NotificationAppInternal* notification; /**< Notification service handle (internal cast) */
+    float original_brightness;       /**< Saved brightness to restore on exit */
 } BigClockState;
 
 /* ============================================================================
@@ -388,25 +425,27 @@ static void input_callback(InputEvent* input_event, void* ctx) {
  * ============================================================================ */
 
 /**
- * @brief Set backlight brightness using direct hardware control
+ * @brief Set backlight brightness via notification settings
  *
- * Bypasses the notification system to avoid flickering issues.
- * The brightness value is scaled from percentage (0-100) to
- * hardware value (0-255).
+ * Uses the NightStand Clock approach: directly modifies the notification
+ * app's internal brightness setting, then triggers a backlight update.
+ * This avoids flickering because the system uses our value instead of
+ * overriding it.
  *
+ * @param state       Application state (contains notification handle)
  * @param brightness  Brightness percentage (0-100)
  */
-static void backlight_set_brightness(uint8_t brightness) {
+static void backlight_set_brightness(BigClockState* state, uint8_t brightness) {
     /* Clamp to valid range */
     if(brightness > BRIGHTNESS_MAX) {
         brightness = BRIGHTNESS_MAX;
     }
 
-    /* Scale percentage to hardware value (0-255) */
-    uint8_t hardware_value = (uint16_t)(brightness * 255) / 100;
+    /* Set brightness in notification settings (0.0 - 1.0) */
+    state->notification->settings.display_brightness = (float)brightness / 100.0f;
 
-    /* Apply directly via hardware API */
-    furi_hal_light_set(LightBacklight, hardware_value);
+    /* Trigger backlight update with new brightness value */
+    notification_message((NotificationApp*)state->notification, &sequence_display_backlight_on);
 }
 
 /* ============================================================================
@@ -424,7 +463,7 @@ static void brightness_increase(BigClockState* state) {
         if(state->brightness > BRIGHTNESS_MAX) {
             state->brightness = BRIGHTNESS_MAX;
         }
-        backlight_set_brightness(state->brightness);
+        backlight_set_brightness(state, state->brightness);
         state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
     }
 }
@@ -437,7 +476,7 @@ static void brightness_increase(BigClockState* state) {
 static void brightness_decrease(BigClockState* state) {
     if(state->brightness >= BRIGHTNESS_STEP) {
         state->brightness -= BRIGHTNESS_STEP;
-        backlight_set_brightness(state->brightness);
+        backlight_set_brightness(state, state->brightness);
         state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
     }
 }
@@ -507,6 +546,8 @@ static BigClockState* state_alloc(void) {
     state->brightness = BRIGHTNESS_MAX;
     state->brightness_indicator = 0;
     state->is_running = true;
+    state->notification = NULL;
+    state->original_brightness = 1.0f;
 
     return state;
 }
@@ -544,11 +585,17 @@ int32_t big_clock_app(void* p) {
     Gui* gui = furi_record_open(RECORD_GUI);
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
-    /* Open notification service (for cleanup on exit) */
-    NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+    /* Open notification service and cast to internal type for brightness access */
+    state->notification = (NotificationAppInternal*)furi_record_open(RECORD_NOTIFICATION);
+
+    /* Save original brightness to restore on exit */
+    state->original_brightness = state->notification->settings.display_brightness;
+
+    /* Enable always-on backlight */
+    notification_message((NotificationApp*)state->notification, &sequence_display_backlight_enforce_on);
 
     /* Set initial brightness */
-    backlight_set_brightness(state->brightness);
+    backlight_set_brightness(state, state->brightness);
 
     /* Main loop */
     InputEvent event;
@@ -562,9 +609,6 @@ int32_t big_clock_app(void* p) {
             state->brightness_indicator--;
         }
 
-        /* Maintain brightness (prevents system timeout) */
-        backlight_set_brightness(state->brightness);
-
         /* Request screen redraw */
         view_port_update(view_port);
 
@@ -574,8 +618,9 @@ int32_t big_clock_app(void* p) {
         }
     }
 
-    /* Cleanup: restore default backlight behavior */
-    notification_message(notification, &sequence_display_backlight_on);
+    /* Cleanup: restore original brightness and default backlight behavior */
+    state->notification->settings.display_brightness = state->original_brightness;
+    notification_message((NotificationApp*)state->notification, &sequence_display_backlight_enforce_auto);
     furi_record_close(RECORD_NOTIFICATION);
 
     /* Remove from GUI */
