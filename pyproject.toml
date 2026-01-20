@@ -11,7 +11,8 @@ license = {text = "MIT"}
 keywords = ["flipper", "flipper-zero", "fap", "embedded"]
 
 dependencies = [
-    "ufbt>=0.2.6"
+    "ufbt>=0.2.6",
+    "pyserial (>=3.5,<4.0)"
 ]
 
 [project.urls]
