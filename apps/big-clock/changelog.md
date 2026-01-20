@@ -2,6 +2,13 @@
 
 All notable changes to Big Clock will be documented in this file.
 
+## [1.2] - 2026-01-20
+
+### Fixed bugs
+
+- fixed screen flickering issue; tested on official firmware and momentum custom firmware.
+
+
 ## [1.1] - 2026-01-19
 
 ### Added
