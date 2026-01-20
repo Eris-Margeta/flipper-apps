@@ -131,10 +131,16 @@ jobs:
                 version=$(grep -oP 'fap_version\s*=\s*"\K[^"]+' application.fam || echo "unknown")
               fi
 
-              # Copy .fap to release artifacts with version in filename
-              if [ -f "dist/${app_name}.fap" ]; then
-                cp "dist/${app_name}.fap" "../../release-artifacts/${app_name}-v${version}.fap"
-                echo "  -> ${app_name}-v${version}.fap"
+              # Find the built .fap file (name uses appid with underscores, not folder name)
+              # e.g., reality-clock folder builds reality_clock.fap
+              fap_file=$(find dist -maxdepth 1 -name "*.fap" ! -name "*_d.fap" | head -1)
+
+              if [ -n "$fap_file" ]; then
+                cp "$fap_file" "../../release-artifacts/${app_name}-v${version}.fap"
+                echo "  -> ${app_name}-v${version}.fap (from $fap_file)"
+              else
+                echo "  ❌ No .fap file found in dist/"
+                ls -la dist/
               fi
 
               cd - > /dev/null
