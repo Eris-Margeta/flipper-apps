@@ -128,6 +128,16 @@ just -f justfile.python install big-clock
 | `justfile` (default) | `poetry run python -m ufbt` | Poetry users (recommended) |
 | `justfile.python` | `python3 -m ufbt` | Virtualenv or global pip users |
 
+## Development Tips
+
+See [docs/DEVELOPMENT_TIPS.md](docs/DEVELOPMENT_TIPS.md) for lessons learned, including:
+
+- **Flicker-free brightness control** - The NightStand Clock approach
+- **Always-on backlight** - Proper use of notification sequences
+- **Rolling buffers** - Stable sensor readings
+- **Hardware access** - SubGHz radio, temperature sensor
+- **Code organization** - Recommended patterns
+
 ## Creating a New App
 
 1. Copy the template:
@@ -161,7 +171,8 @@ flipper-apps/
 │   ├── big-clock/       # Big Clock application
 │   └── reality-clock/   # Reality Dimension Clock (experimental)
 ├── docs/
-│   └── PUBLISHING.md    # Catalog publishing guide
+│   ├── PUBLISHING.md       # Catalog publishing guide
+│   └── DEVELOPMENT_TIPS.md # Tips & tricks for app development
 ├── justfile             # Just commands (Poetry)
 ├── justfile.python      # Just commands (Python/pip)
 ├── CONTRIBUTING.md      # Contribution guidelines
@@ -209,3 +220,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 - [Flipper Devices](https://github.com/flipperdevices) for the hardware and SDK
 - [Flipper Zero Firmware](https://github.com/flipperdevices/flipperzero-firmware)
+- [@nymda](https://github.com/nymda) for the [NightStand Clock](https://github.com/nymda/FlipperNightStand) brightness approach
