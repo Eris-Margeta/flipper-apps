@@ -67,6 +67,67 @@ poetry run ufbt launch    # Build + install + run on Flipper
 
 The compiled `.fap` file will be in `dist/`.
 
+## Just Commands
+
+This project includes [just](https://github.com/casey/just) command recipes for convenient building and installation.
+
+### Install just
+
+```bash
+# macOS
+brew install just
+
+# Linux
+cargo install just
+# or: apt install just
+
+# Windows
+choco install just
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `just install-all` | Install all apps to Flipper (excludes `_template`) |
+| `just install <app>` | Install a specific app by folder name |
+| `just build-all` | Build all apps without installing |
+| `just build <app>` | Build a specific app |
+| `just clean-all` | Clean all build artifacts |
+| `just clean <app>` | Clean a specific app's build artifacts |
+| `just list` | List available apps |
+
+### Usage Examples
+
+```bash
+# Install all apps to your Flipper
+just install-all
+
+# Install only the big-clock app
+just install big-clock
+
+# Build without installing
+just build reality-clock
+
+# See available apps
+just list
+```
+
+### Alternative: Python Version
+
+If you're using a virtualenv or global pip install instead of Poetry, use `justfile.python`:
+
+```bash
+# Activate your virtualenv first, then:
+just -f justfile.python install-all
+just -f justfile.python install big-clock
+```
+
+| Justfile | Uses | When to Use |
+|----------|------|-------------|
+| `justfile` (default) | `poetry run ufbt` | Poetry users (recommended) |
+| `justfile.python` | `python -m ufbt` | Virtualenv or global pip users |
+
 ## Creating a New App
 
 1. Copy the template:
@@ -101,6 +162,8 @@ flipper-apps/
 │   └── reality-clock/   # Reality Dimension Clock (experimental)
 ├── docs/
 │   └── PUBLISHING.md    # Catalog publishing guide
+├── justfile             # Just commands (Poetry)
+├── justfile.python      # Just commands (Python/pip)
 ├── CONTRIBUTING.md      # Contribution guidelines
 ├── SECURITY.md          # Security policy
 ├── LICENSE              # MIT License

@@ -126,6 +126,21 @@ typing = ["typing-extensions ; python_version < \"3.10\""]
 xmp = ["defusedxml"]
 
 [[package]]
+name = "pyserial"
+version = "3.5"
+description = "Python Serial Port Extension"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0"},
+    {file = "pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb"},
+]
+
+[package.extras]
+cp2110 = ["hidapi"]
+
+[[package]]
 name = "ufbt"
 version = "0.2.6"
 description = "uFBT - micro Flipper Build Tool. Tool for building and developing applications (.fap) for Flipper Zero and its device family."
@@ -143,4 +158,4 @@ oslex = ">=0.1.3"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "488e2479ec3d7ad8ab5f0f5f62cf7f11febfbff970d27298d7fbdfccd7246acd"
+content-hash = "dda58c8a62076b56597da583d081a09ab329a6244656e011bf834a2753417135"
