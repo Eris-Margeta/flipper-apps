@@ -1,11 +1,11 @@
-# Big Clock v1.1
+# Big Clock v1.2
 
 > Full-screen digital bedside/tableside clock with adjustable brightness
 
 ![Big Clock Screenshot](screenshots/screenshot1.png)
 
 [![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)](https://flipperzero.one/)
-[![Version](https://img.shields.io/badge/version-1.1-blue)](../../releases)
+[![Version](https://img.shields.io/badge/version-1.2-blue)](../../releases)
 [![Release](https://img.shields.io/github/v/release/Eris-Margeta/flipper-apps?filter=big-clock-v*&label=release)](https://github.com/Eris-Margeta/flipper-apps/releases?q=big-clock)
 [![CI](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml/badge.svg)](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml)
 
@@ -103,7 +103,7 @@ poetry run python -m ufbt launch
 | App Type | External (.fap) |
 | Category | Tools |
 | Stack Size | 2KB |
-| Version | 1.1 |
+| Version | 1.2 |
 
 ### Implementation Notes
 

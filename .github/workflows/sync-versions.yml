@@ -1,0 +1,149 @@
+name: Sync Versions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/*/VERSION'
+      - 'apps/*/application.fam'
+
+jobs:
+  sync-versions:
+    name: Sync Version Numbers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync versions to READMEs
+        run: |
+          echo "Syncing versions from VERSION files to READMEs..."
+
+          CHANGES_MADE=false
+
+          for app_dir in apps/*/; do
+            app_name=$(basename "${app_dir}")
+
+            # Skip template
+            if [ "$app_name" = "_template" ]; then
+              echo "Skipping _template"
+              continue
+            fi
+
+            # Check if VERSION file exists
+            if [ ! -f "${app_dir}VERSION" ]; then
+              echo "⚠️  No VERSION file in ${app_name}"
+              continue
+            fi
+
+            VERSION=$(cat "${app_dir}VERSION" | tr -d '[:space:]')
+            README="${app_dir}README.md"
+
+            if [ ! -f "$README" ]; then
+              echo "⚠️  No README.md in ${app_name}"
+              continue
+            fi
+
+            echo "Processing ${app_name} (v${VERSION})..."
+
+            # Update app README: Title (# App Name vX.X)
+            # Matches: # Any Title vX.X or # Any Title vX.X.X
+            if grep -qE "^# .+ v[0-9]+\.[0-9]+" "$README"; then
+              sed -i -E "s/^(# .+) v[0-9]+\.[0-9]+(\.[0-9]+)?/\1 v${VERSION}/" "$README"
+              echo "  ✓ Updated title version"
+              CHANGES_MADE=true
+            fi
+
+            # Update app README: Version badge
+            # Matches: version-X.X-blue or version-X.X.X-blue
+            if grep -q "img.shields.io/badge/version-" "$README"; then
+              sed -i -E "s|(img\.shields\.io/badge/version-)[0-9]+\.[0-9]+(\.[0-9]+)?(-blue)|\1${VERSION}\3|g" "$README"
+              echo "  ✓ Updated version badge"
+              CHANGES_MADE=true
+            fi
+
+            # Update app README: Technical details table (| Version | X.X |)
+            if grep -qE "^\| Version \| [0-9]+\.[0-9]+" "$README"; then
+              sed -i -E "s/^(\| Version \| )[0-9]+\.[0-9]+(\.[0-9]+)?( \|)/\1${VERSION}\3/" "$README"
+              echo "  ✓ Updated technical details table"
+              CHANGES_MADE=true
+            fi
+
+          done
+
+          echo ""
+          echo "Updating root README.md app table..."
+
+          # Update root README app table
+          ROOT_README="README.md"
+
+          for app_dir in apps/*/; do
+            app_name=$(basename "${app_dir}")
+
+            if [ "$app_name" = "_template" ]; then
+              continue
+            fi
+
+            if [ ! -f "${app_dir}VERSION" ]; then
+              continue
+            fi
+
+            VERSION=$(cat "${app_dir}VERSION" | tr -d '[:space:]')
+
+            # Update the apps table row for this app
+            # Matches: | [App Name](apps/app-name/) | description | X.X | Category |
+            if grep -qE "^\| \[.+\]\(apps/${app_name}/\)" "$ROOT_README"; then
+              # Use awk for more reliable table cell replacement
+              awk -v app="$app_name" -v ver="$VERSION" '
+                $0 ~ "\\[.+\\]\\(apps/" app "/\\)" {
+                  # Split by | and update the version column (3rd content column, index 4)
+                  n = split($0, a, "|")
+                  if (n >= 5) {
+                    a[4] = " " ver " "
+                    for (i=1; i<=n; i++) {
+                      printf "%s", a[i]
+                      if (i < n) printf "|"
+                    }
+                    print ""
+                    next
+                  }
+                }
+                { print }
+              ' "$ROOT_README" > "${ROOT_README}.tmp" && mv "${ROOT_README}.tmp" "$ROOT_README"
+              echo "  ✓ Updated root README table for ${app_name}"
+              CHANGES_MADE=true
+            fi
+          done
+
+          echo ""
+          if [ "$CHANGES_MADE" = true ]; then
+            echo "✅ Version sync complete - changes made"
+          else
+            echo "ℹ️  No version changes detected"
+          fi
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to commit"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected:"
+            git diff --stat
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git commit -m "chore: sync version numbers across READMEs [skip ci]"
+          git push

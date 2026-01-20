@@ -10,7 +10,7 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 
 | App | Description | Version | Category |
 |-----|-------------|---------|----------|
-| [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | 1.1 | Tools |
+| [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | 1.2 | Tools |
 | [Reality Clock](apps/reality-clock/) | Real dimensional stability monitor using CC1101 multi-band RSSI analysis | 4.0 | Tools |
 
 ## Quick Start
@@ -96,6 +96,8 @@ choco install just
 | `just clean-all` | Clean all build artifacts |
 | `just clean <app>` | Clean a specific app's build artifacts |
 | `just list` | List available apps |
+
+(there's a bug on just install all; it requires adding a wait time before a person manually exits each app on the flipper device before another installation starts. TODO: add later)
 
 ### Usage Examples
 
