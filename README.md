@@ -11,7 +11,7 @@ A collection of custom applications for [Flipper Zero](https://flipperzero.one/)
 | App | Description | Version | Category |
 |-----|-------------|---------|----------|
 | [Big Clock](apps/big-clock/) | Bedside/tableside clock with adjustable brightness (0-100%) | 1.1 | Tools |
-| [Reality Clock](apps/reality-clock/) | Dimensional stability monitor using multi-band EM ratio analysis | 1.0 | Tools |
+| [Reality Clock](apps/reality-clock/) | Real dimensional stability monitor using CC1101 multi-band RSSI analysis | 3.0 | Tools |
 
 ## Quick Start
 

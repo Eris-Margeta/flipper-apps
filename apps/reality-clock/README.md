@@ -5,8 +5,8 @@
 A dimensional stability monitoring application that measures electromagnetic ratios across multiple frequency bands to detect anomalies in physical constants.
 
 ![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)
-![Version](https://img.shields.io/badge/version-2.1-blue)
-![Status](https://img.shields.io/badge/status-experimental-yellow)
+![Version](https://img.shields.io/badge/version-3.0-blue)
+![Status](https://img.shields.io/badge/status-real--sensors-brightgreen)
 
 ## Theoretical Basis
 
@@ -22,26 +22,28 @@ The app calculates:
 Φ = (R_LF/HF) / (R_HF/UHF) = (S_LF × S_UHF) / (S_HF²)
 ```
 
-Where:
-- **LF** = 125 kHz band (Low Frequency)
-- **HF** = 13.56 MHz band (High Frequency)
-- **UHF** = 433 MHz band (Ultra High Frequency)
+Where (using real CC1101 SubGHz radio measurements):
+- **LF** = 315 MHz band (Lower SubGHz reference)
+- **HF** = 433.92 MHz band (Mid SubGHz anchor)
+- **UHF** = 868.35 MHz band (Upper SubGHz reference)
 
-In a stable dimension, Φ should remain constant.
+In a stable dimension, Φ should remain constant. Version 3.0 uses **real RSSI measurements** from the Flipper's CC1101 radio across all three bands.
 
 ## Features
 
-- **Multi-Band Analysis**: Measures signal strength across LF, HF, and UHF bands
-- **Baseline Calibration**: Establishes your "home dimension" reference
+- **Real Multi-Band Analysis**: Measures actual RSSI across three SubGHz frequency bands using CC1101 radio
+- **Adaptive Baseline**: EMA-based tracking that adapts to your "current reality"
 - **Real-Time Monitoring**: Continuous dimensional stability tracking with 1000-sample rolling buffer
-- **Drift Detection**: Shows percentage deviation from baseline
+- **Internal Temperature Sensor**: STM32 ADC die temperature monitoring
+- **Drift Detection**: Shows stability percentage based on baseline tracking quality
 - **Brightness Control**: Adjustable screen brightness (0-100%)
 - **QR Code Info Screen**: Quick access to source code repository
-- **Status Classification**:
-  - **HOME**: >90% match - Home dimension confirmed
-  - **STABLE**: 75-90% match - Within normal parameters
-  - **DRIFT**: 50-75% match - Minor deviations detected
-  - **FOREIGN**: <50% match - Significant deviation detected
+- **Optional SD Logging**: CSV data export for analysis (compile-time flag)
+- **Status Classification** (based on stability, not fixed baseline):
+  - **HOME**: >98% stability - Your current dimension, rock solid
+  - **STABLE**: 95-98% stability - Within normal parameters
+  - **DRIFT**: 90-95% stability - Minor fluctuations detected
+  - **FOREIGN**: <90% stability - Significant deviation from baseline tracking
 
 ## Screens
 
@@ -104,24 +106,41 @@ When adjusting brightness or pressing buttons, there may be brief flickers to ma
 
 ### Hardware Used
 
-- **CC1101 Radio** (Sub-GHz): Direct RSSI measurement at 433.92 MHz
-- **Simulated Bands**: LF and HF bands are simulated based on theoretical near-field coupling characteristics
+- **CC1101 SubGHz Radio**: Real RSSI measurement across three frequency bands
+  - 315 MHz (antenna path 2)
+  - 433.92 MHz (antenna path 1)
+  - 868.35 MHz (antenna path 3)
+- **STM32 Internal ADC**: Die temperature sensor with 64x oversampling
+- **1000-Sample Rolling Buffer**: Per-band circular buffers for stability
 
 ### Measurement Process
 
-1. **UHF Band**: Direct RSSI reading from CC1101 radio
-2. **HF Band**: Simulated with mid-range coupling factor
-3. **LF Band**: Simulated with near-field coupling characteristics
-4. **Averaging**: 10 samples per measurement cycle
-5. **Calibration**: 50 samples to establish baseline Φ
+1. **Band Switching**: `furi_hal_subghz_set_frequency_and_path()` configures CC1101
+2. **RX Mode**: Radio switched to receive mode
+3. **Stabilization**: 500μs delay for RSSI to settle
+4. **RSSI Read**: Direct `furi_hal_subghz_get_rssi()` call
+5. **Idle**: Radio returned to idle between measurements
+6. **Buffer**: Raw values added to 1000-sample rolling buffer
+7. **PHI**: Calculated from buffer averages using normalized dB conversion
 
-### Limitations
+### Adaptive Baseline (EMA)
 
-This is an experimental/theoretical device. True dimensional monitoring would require:
-- Dedicated spectrum analyzers for each band
-- Atomic clock references for timing stability
-- Shielded measurement chambers
-- Correlation with fundamental constant measurements
+Unlike previous versions with fixed baselines, v3.0 uses Exponential Moving Average:
+
+```
+baseline_new = α × current + (1-α) × baseline_old
+```
+
+- **Slow EMA (α=0.05)**: Long-term baseline, ~200 sample adaptation
+- **Fast EMA (α=0.15)**: Short-term trend, ~50 sample adaptation
+
+This means **wherever you are becomes "home"** over time. The device measures stability relative to your current reality, not a fixed reference point.
+
+### What This Actually Measures
+
+The device measures how consistently electromagnetic signals propagate across different frequencies. In our dimension, this ratio is stable. Environmental factors (RF interference, temperature, movement) cause small variations that the adaptive baseline tracks.
+
+A true dimensional shift would cause the ratio between bands to change in ways the baseline cannot track - that's what triggers FOREIGN status.
 
 ## Building
 
@@ -139,17 +158,23 @@ poetry run ufbt launch    # Build + install + run
 | App Type | External (.fap) |
 | Category | Tools |
 | Stack Size | 8KB |
-| Version | 2.1 |
+| Version | 3.0 |
+| Sensor Mode | Real Hardware (CC1101 + ADC) |
+| Frequency Bands | 315 / 433.92 / 868.35 MHz |
+| Buffer Size | 1000 samples per band |
+| Sample Rate | 5Hz (calibration) / 1Hz (normal) |
 
 ## Academic Paper
 
 See [paper.html](paper.html) for the full theoretical framework and experimental design.
 
-## Disclaimer
+## How It Works (For Real)
 
-This application is a thought experiment implementation. The "dimensional stability" readings are based on electromagnetic measurements that vary due to normal environmental factors (RF interference, temperature, movement, etc.).
+This application performs **real electromagnetic measurements** using the Flipper Zero's CC1101 SubGHz radio. It measures RSSI (Received Signal Strength Indicator) at three different frequencies and calculates a ratio (PHI) that should remain constant if physical constants are stable.
 
-Actual detection of dimensional shifts would require fundamental physics research and is not currently possible with consumer hardware.
+The readings you see are genuine RF measurements from your environment. The "dimensional stability" metric reflects how consistently this ratio maintains itself over time. Environmental factors (RF interference, nearby electronics, movement, temperature) will cause natural variations - the adaptive baseline system accounts for this.
+
+While framed as a "dimensional detector," what you're actually observing is the consistency of electromagnetic propagation characteristics in your local environment. It's real physics, real measurements, and genuinely interesting data - the interdimensional framing is just for fun.
 
 ## License
 

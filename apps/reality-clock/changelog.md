@@ -2,6 +2,52 @@
 
 All notable changes to Reality Clock will be documented in this file.
 
+## [3.0] - 2026-01-20
+
+### MAJOR: Real Hardware Sensors
+
+This release marks the transition from simulated readings to **real multi-band electromagnetic analysis**. The Reality Dimension Clock now uses actual Flipper Zero hardware to measure dimensional stability.
+
+### Added
+- **Real SubGHz RSSI Measurement** - Three-band analysis using CC1101 radio
+  - 315 MHz (Band 1) - Lower frequency reference point
+  - 433.92 MHz (Band 2) - Mid frequency anchor
+  - 868.35 MHz (Band 3) - Upper frequency reference
+- **Internal Temperature Sensor** - STM32 ADC-based die temperature monitoring
+- **Adaptive Baseline System** - Exponential Moving Average (EMA) tracking
+  - Slow EMA (α=0.05) for long-term baseline adaptation
+  - Fast EMA (α=0.15) for short-term trend detection
+  - Baseline now tracks "current reality" - wherever you ARE is home
+- **SD Card Logging** (optional, compile-time flag)
+  - CSV format for data analysis
+  - Timestamps, all RSSI values, PHI metrics, stability scores
+  - Auto-sync every 100 samples
+- **Enhanced Stability Algorithm**
+  - Stability based on baseline tracking quality, not fixed reference
+  - Sensor noise is NOT interpreted as dimensional instability
+  - Only sudden jumps that baseline can't track indicate instability
+
+### Changed
+- **No More Simulated Data** - All readings are real hardware measurements
+- Removed fake LF/HF band simulation code
+- PHI calculation uses normalized dB values to prevent underflow
+- Stability thresholds adjusted for real-world sensor behavior:
+  - HOME: >98% stability (very stable readings)
+  - STABLE: >95% stability (mostly stable)
+  - UNSTABLE: >90% stability (some fluctuation)
+  - FOREIGN: <90% stability (significant deviation)
+
+### Technical Details
+- SubGHz radio: `furi_hal_subghz_set_frequency_and_path()` for band switching
+- RSSI acquisition: 500μs stabilization delay per reading
+- ADC: 64x oversampling, 247.5 cycle sampling time for accuracy
+- Band mapping: 315→LF, 433→HF, 868→UHF (for display consistency)
+
+### Why This Matters
+Previous versions simulated dimensional readings using entropy and timing jitter. Version 3.0 measures **actual electromagnetic propagation characteristics** across three distinct frequency bands. If fundamental physical constants (ε₀, μ₀, c) were to vary, the ratio between these bands would shift - and this device would detect it.
+
+---
+
 ## [2.1] - 2026-01-19
 
 ### Added
