@@ -125,8 +125,8 @@ just -f justfile.python install big-clock
 
 | Justfile | Uses | When to Use |
 |----------|------|-------------|
-| `justfile` (default) | `poetry run ufbt` | Poetry users (recommended) |
-| `justfile.python` | `python -m ufbt` | Virtualenv or global pip users |
+| `justfile` (default) | `poetry run python -m ufbt` | Poetry users (recommended) |
+| `justfile.python` | `python3 -m ufbt` | Virtualenv or global pip users |
 
 ## Creating a New App
 

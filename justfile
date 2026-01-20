@@ -22,7 +22,7 @@ install app:
         exit 1
     fi
     echo "Installing {{app}}..."
-    cd "apps/{{app}}" && poetry run ufbt launch
+    cd "apps/{{app}}" && poetry run python -m ufbt launch
 
 # Install all apps (excludes _template)
 install-all:
@@ -37,7 +37,7 @@ install-all:
         fi
         echo ""
         echo "=== Installing $app_name ==="
-        cd "$app" && poetry run ufbt launch
+        cd "$app" && poetry run python -m ufbt launch
         cd - > /dev/null
     done
     echo ""
@@ -61,7 +61,7 @@ build app:
         exit 1
     fi
     echo "Building {{app}}..."
-    cd "apps/{{app}}" && poetry run ufbt
+    cd "apps/{{app}}" && poetry run python -m ufbt
 
 # Build all apps
 build-all:
@@ -75,7 +75,7 @@ build-all:
         fi
         echo ""
         echo "=== Building $app_name ==="
-        cd "$app" && poetry run ufbt
+        cd "$app" && poetry run python -m ufbt
         cd - > /dev/null
     done
     echo ""
@@ -90,7 +90,7 @@ clean app:
         exit 1
     fi
     echo "Cleaning {{app}}..."
-    cd "apps/{{app}}" && poetry run ufbt clean
+    cd "apps/{{app}}" && poetry run python -m ufbt -c
 
 # Clean all build artifacts
 clean-all:
@@ -103,7 +103,7 @@ clean-all:
             continue
         fi
         echo "Cleaning $app_name..."
-        cd "$app" && poetry run ufbt clean
+        cd "$app" && poetry run python -m ufbt -c
         cd - > /dev/null
     done
     echo "Done!"

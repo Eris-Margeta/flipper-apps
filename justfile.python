@@ -1,5 +1,5 @@
 # Flipper Apps Justfile (Python version)
-# Uses: python -m ufbt (for virtualenv or global pip installs)
+# Uses: python3 -m ufbt (for virtualenv or global pip installs)
 #
 # Usage:
 #   just -f justfile.python install-all     - Install all apps
@@ -27,7 +27,7 @@ install app:
         exit 1
     fi
     echo "Installing {{app}}..."
-    cd "apps/{{app}}" && python -m ufbt launch
+    cd "apps/{{app}}" && python3 -m ufbt launch
 
 # Install all apps (excludes _template)
 install-all:
@@ -42,7 +42,7 @@ install-all:
         fi
         echo ""
         echo "=== Installing $app_name ==="
-        cd "$app" && python -m ufbt launch
+        cd "$app" && python3 -m ufbt launch
         cd - > /dev/null
     done
     echo ""
@@ -66,7 +66,7 @@ build app:
         exit 1
     fi
     echo "Building {{app}}..."
-    cd "apps/{{app}}" && python -m ufbt
+    cd "apps/{{app}}" && python3 -m ufbt
 
 # Build all apps
 build-all:
@@ -80,7 +80,7 @@ build-all:
         fi
         echo ""
         echo "=== Building $app_name ==="
-        cd "$app" && python -m ufbt
+        cd "$app" && python3 -m ufbt
         cd - > /dev/null
     done
     echo ""
@@ -95,7 +95,7 @@ clean app:
         exit 1
     fi
     echo "Cleaning {{app}}..."
-    cd "apps/{{app}}" && python -m ufbt clean
+    cd "apps/{{app}}" && python3 -m ufbt -c
 
 # Clean all build artifacts
 clean-all:
@@ -108,7 +108,7 @@ clean-all:
             continue
         fi
         echo "Cleaning $app_name..."
-        cd "$app" && python -m ufbt clean
+        cd "$app" && python3 -m ufbt -c
         cd - > /dev/null
     done
     echo "Done!"
