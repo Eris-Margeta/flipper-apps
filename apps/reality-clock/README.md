@@ -19,9 +19,7 @@ This application is based on the theoretical framework that fundamental physical
 
 If these constants were to change (as theorized in dimensional shift scenarios), the ratios between signal propagation at different frequencies would deviate from their baseline values.
 
-### The Dimensional Stability Index (Φ)
-
-The app calculates:
+**The Dimensional Stability Index (Φ)** is calculated as:
 
 ```
 Φ = (R_LF/HF) / (R_HF/UHF) = (S_LF × S_UHF) / (S_HF²)
@@ -75,7 +73,7 @@ Navigate between screens using LEFT/RIGHT:
 | UP/DOWN | Scroll details / Adjust brightness |
 | BACK | Exit application |
 
-### Settings Menu
+## Settings Menu
 
 Press OK to access the settings menu:
 
@@ -89,8 +87,7 @@ Press OK to access the settings menu:
 
 ## Known Issues
 
-### Brightness Flicker (Fixed)
-Brightness used to flicker before I discovered a way to correctly control it. If you experience some flickers or weird behavior, report it as an issue
+**Brightness Flicker (Fixed):** Brightness used to flicker before I discovered a way to correctly control it. If you experience some flickers or weird behavior, report it as an issue.
 
 ## Display
 
@@ -108,43 +105,32 @@ Brightness used to flicker before I discovered a way to correctly control it. If
 
 ## Technical Implementation
 
-### Hardware Used
-
-- **CC1101 SubGHz Radio**: Real RSSI measurement across three frequency bands
-  - 315 MHz (antenna path 2)
-  - 433.92 MHz (antenna path 1)
-  - 868.35 MHz (antenna path 3)
+**Hardware Used:**
+- **CC1101 SubGHz Radio**: Real RSSI measurement across three frequency bands (315 MHz via antenna path 2, 433.92 MHz via antenna path 1, 868.35 MHz via antenna path 3)
 - **STM32 Internal ADC**: Die temperature sensor with 64x oversampling
 - **1000-Sample Rolling Buffer**: Per-band circular buffers for stability
 
-### Measurement Process
+**Measurement Process:**
+1. Band Switching: `furi_hal_subghz_set_frequency_and_path()` configures CC1101
+2. RX Mode: Radio switched to receive mode
+3. Stabilization: 500μs delay for RSSI to settle
+4. RSSI Read: Direct `furi_hal_subghz_get_rssi()` call
+5. Idle: Radio returned to idle between measurements
+6. Buffer: Raw values added to 1000-sample rolling buffer
+7. PHI: Calculated from buffer averages using normalized dB conversion
 
-1. **Band Switching**: `furi_hal_subghz_set_frequency_and_path()` configures CC1101
-2. **RX Mode**: Radio switched to receive mode
-3. **Stabilization**: 500μs delay for RSSI to settle
-4. **RSSI Read**: Direct `furi_hal_subghz_get_rssi()` call
-5. **Idle**: Radio returned to idle between measurements
-6. **Buffer**: Raw values added to 1000-sample rolling buffer
-7. **PHI**: Calculated from buffer averages using normalized dB conversion
-
-### Adaptive Baseline (EMA)
-
-Unlike previous versions with fixed baselines, v3.0 uses Exponential Moving Average:
+**Adaptive Baseline (EMA):** Unlike previous versions with fixed baselines, v3.0 uses Exponential Moving Average:
 
 ```
 baseline_new = α × current + (1-α) × baseline_old
 ```
 
-- **Slow EMA (α=0.05)**: Long-term baseline, ~200 sample adaptation
-- **Fast EMA (α=0.15)**: Short-term trend, ~50 sample adaptation
+- Slow EMA (α=0.05): Long-term baseline, ~200 sample adaptation
+- Fast EMA (α=0.15): Short-term trend, ~50 sample adaptation
 
 This means **wherever you are becomes "home"** over time. The device measures stability relative to your current reality, not a fixed reference point.
 
-### What This Actually Measures
-
-The device measures how consistently electromagnetic signals propagate across different frequencies. In our dimension, this ratio is stable. Environmental factors (RF interference, temperature, movement) cause small variations that the adaptive baseline tracks.
-
-A true dimensional shift would cause the ratio between bands to change in ways the baseline cannot track - that's what triggers FOREIGN status.
+**What This Actually Measures:** The device measures how consistently electromagnetic signals propagate across different frequencies. In our dimension, this ratio is stable. Environmental factors (RF interference, temperature, movement) cause small variations that the adaptive baseline tracks. A true dimensional shift would cause the ratio between bands to change in ways the baseline cannot track - that's what triggers FOREIGN status.
 
 ## Building
 
@@ -190,14 +176,7 @@ MIT License - see [LICENSE](../../LICENSE)
 
 ## App Catalog Submission
 
-### Missing Items
-
-To submit to the Flipper Application Catalog, the following items are needed:
-
-- [x] **Update manifest.yml** - Replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing
-
-### Ready Items
-
+**Ready Items:**
 - [x] `manifest.yml` - Catalog manifest file (needs commit hash)
 - [x] `README.md` - Full documentation
 - [x] `changelog.md` - Version history
@@ -206,9 +185,9 @@ To submit to the Flipper Application Catalog, the following items are needed:
 - [x] `paper.html` - Academic paper
 - [x] `screenshots/` - 7 screenshots (screenshot1-7.png)
 
----
+**Note:** Update `manifest.yml` to replace `PENDING_COMMIT_HASH` with actual commit SHA after pushing.
 
-## Tested
+## Tested Firmware
 
 | Firmware | Version | Status |
 |----------|---------|--------|

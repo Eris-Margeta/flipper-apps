@@ -150,7 +150,7 @@ See [docs/DEVELOPMENT_TIPS.md](docs/DEVELOPMENT_TIPS.md) for lessons learned, in
 2. Update files:
    - `application.fam` - Set unique `appid`, `name`, version
    - `app.c` - Implement your app
-   - `README.md` - Document your app
+   - `README.md` - Document your app (see README requirements below)
    - `VERSION` - Set version number
 
 3. Create icon and screenshots
@@ -162,6 +162,18 @@ See [docs/DEVELOPMENT_TIPS.md](docs/DEVELOPMENT_TIPS.md) for lessons learned, in
    ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## App README Requirements
+
+**For Flipper App Catalog submission**, individual app READMEs must follow these rules:
+
+| Rule | Description |
+|------|-------------|
+| **Max heading level: 2** | Only use `#` (H1) and `##` (H2) headings. Level 3+ (`###`, `####`) are **forbidden**. |
+| **Single H1** | Use one `#` heading for the app title only |
+| **Flat structure** | Organize content under `##` sections without nesting |
+
+This is a requirement for PRs to the [flipper-application-catalog](https://github.com/flipperdevices/flipper-application-catalog).
 
 ## Repository Structure
 

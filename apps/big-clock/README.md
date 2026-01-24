@@ -64,11 +64,7 @@ alternate style (thinking about it)
 
 ## Building
 
-### Prerequisites
-
-- [ufbt](https://github.com/flipperdevices/flipperzero-ufbt) (micro Flipper Build Tool)
-
-### Build Commands
+**Prerequisites:** [ufbt](https://github.com/flipperdevices/flipperzero-ufbt) (micro Flipper Build Tool)
 
 ```bash
 # Using Poetry (recommended)
@@ -80,20 +76,16 @@ pip install ufbt
 python -m ufbt launch
 ```
 
-### Output
-
 The compiled `.fap` file will be in the `dist/` directory.
 
 ## Installation
 
-### Via ufbt (recommended)
+**Via ufbt (recommended):**
 ```bash
 poetry run python -m ufbt launch
 ```
 
-### Manual Installation
-1. Build the app with `ufbt`
-2. Copy `dist/big_clock.fap` to your Flipper Zero's SD card at `/ext/apps/Tools/`
+**Manual:** Build the app with `ufbt`, then copy `dist/big_clock.fap` to your Flipper Zero's SD card at `/ext/apps/Tools/`
 
 ## Technical Details
 
@@ -105,11 +97,7 @@ poetry run python -m ufbt launch
 | Stack Size | 2KB |
 | Version | 1.2 |
 
-### Implementation Notes
-
-- Uses direct hardware control via `furi_hal_light_set()` for brightness
-- Brightness levels mapped from 0-100% to hardware values (0-255)
-- Continuously maintains brightness to prevent system timeout
+**Implementation:** Uses direct hardware control via `furi_hal_light_set()` for brightness. Brightness levels mapped from 0-100% to hardware values (0-255). Continuously maintains brightness to prevent system timeout.
 
 ## Version History
 
@@ -119,9 +107,9 @@ Current version: see [VERSION](VERSION)
 
 ## Known Issues
 
-- **Brief flicker on button press/release**: When adjusting brightness, a brief flicker may occur at the moment of button press and release. This appears to be a hardware/firmware limitation related to how the Flipper Zero's backlight system handles brightness changes. The brightness change itself works correctly.
+**Brief flicker on button press/release:** When adjusting brightness, a brief flicker may occur at the moment of button press and release. This appears to be a hardware/firmware limitation related to how the Flipper Zero's backlight system handles brightness changes. The brightness change itself works correctly.
 
-## Tested
+## Tested Firmware
 
 | Firmware | Version | Status |
 |----------|---------|--------|

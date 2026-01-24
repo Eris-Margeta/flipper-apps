@@ -6,6 +6,9 @@
   - Replace "app-name" with your app folder name (used in release tags)
   - Replace "<your-username>" with your GitHub username
   - Update version number in title and badges
+
+  IMPORTANT: For Flipper App Catalog submission, only use # (H1) and ## (H2) headings.
+  Level 3+ headings (###, ####) are forbidden.
 -->
 
 > Short description of what your app does.
@@ -48,12 +51,7 @@
 
 ## Building
 
-### Prerequisites
-
-- [ufbt](https://github.com/flipperdevices/flipperzero-ufbt) (micro Flipper Build Tool)
-- [Poetry](https://python-poetry.org/) (recommended)
-
-### Build Commands
+**Prerequisites:** [ufbt](https://github.com/flipperdevices/flipperzero-ufbt) (micro Flipper Build Tool), [Poetry](https://python-poetry.org/) (recommended)
 
 ```bash
 # Using Poetry (recommended)
@@ -64,20 +62,16 @@ poetry run python -m ufbt
 poetry run python -m ufbt launch
 ```
 
-### Output
-
 The compiled `.fap` file will be in the `dist/` directory.
 
 ## Installation
 
-### From Release (easiest)
-
+**From Release (easiest):**
 1. Go to [Releases](https://github.com/<your-username>/flipper-apps/releases?q=app-name)
 2. Download the latest `app-name-vX.X.fap`
 3. Copy to `/ext/apps/Tools/` on your Flipper Zero
 
-### Via ufbt
-
+**Via ufbt:**
 ```bash
 poetry run python -m ufbt launch
 ```
