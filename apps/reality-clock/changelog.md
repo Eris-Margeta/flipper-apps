@@ -2,6 +2,26 @@
 
 All notable changes to Reality Clock will be documented in this file.
 
+## [4.1] - 2026-01-24
+
+### Fixed
+- **Brightness stability bug** - Fixed brightness reverting to 100% after ~1 hour of use
+  - Root cause: Firmware notification system resets brightness after internal timeout
+  - Solution: Periodic brightness reapplication every 60 seconds (power efficient)
+
+### Changed
+- **Start at system brightness** - App now respects system backlight setting on startup
+  - Previously forced 100% brightness when opened
+  - Now reads and rounds to nearest 5% step
+- **5% brightness increments** - Finer control with 21 levels (was 10% / 11 levels)
+
+### Technical
+- Added `brightness_refresh_time` field for periodic refresh tracking
+- Added `BRIGHTNESS_REFRESH_MS` constant (60 seconds)
+- Removed initial `apply_brightness()` call to preserve system setting
+
+---
+
 ## [4.0] - 2026-01-20
 
 ### Fixed

@@ -142,7 +142,8 @@ typedef struct {
 /** Brightness settings */
 #define BRIGHTNESS_MIN        0
 #define BRIGHTNESS_MAX        100
-#define BRIGHTNESS_STEP       10
+#define BRIGHTNESS_STEP       5
+#define BRIGHTNESS_REFRESH_MS 60000  /* Reapply brightness every 60 sec to prevent firmware reset */
 
 /** Details screen */
 #define DETAILS_LINES        12
@@ -178,6 +179,7 @@ typedef struct {
     int8_t scroll_offset;
     uint8_t menu_selection;   /**< Current menu item */
     uint8_t brightness;       /**< Current brightness 0-100 */
+    uint32_t brightness_refresh_time;  /**< Next time to reapply brightness */
 
     NotificationAppInternal* notification; /**< Notification service (internal cast) */
     float original_brightness;             /**< Saved brightness to restore on exit */
@@ -1130,12 +1132,14 @@ static void process_input(RealityClockState* state, InputEvent* event) {
                 if(state->brightness >= BRIGHTNESS_STEP) {
                     state->brightness -= BRIGHTNESS_STEP;
                     apply_brightness(state, state->brightness);
+                    state->brightness_refresh_time = furi_get_tick() + BRIGHTNESS_REFRESH_MS;
                 }
                 break;
             case InputKeyRight:
                 if(state->brightness <= BRIGHTNESS_MAX - BRIGHTNESS_STEP) {
                     state->brightness += BRIGHTNESS_STEP;
                     apply_brightness(state, state->brightness);
+                    state->brightness_refresh_time = furi_get_tick() + BRIGHTNESS_REFRESH_MS;
                 }
                 break;
             case InputKeyBack:
@@ -1238,7 +1242,8 @@ static RealityClockState* state_alloc(void) {
 
     state->is_running = true;
     state->status = DimStatusCalibrating;
-    state->brightness = 100;  /**< Start at max brightness */
+    state->brightness = BRIGHTNESS_MAX;  /**< Will be updated to system brightness in main */
+    state->brightness_refresh_time = 0;
     state->notification = NULL;
     state->original_brightness = 1.0f;
 
@@ -1269,14 +1274,19 @@ int32_t reality_clock_app(void* p) {
     /* Open notification service and cast to internal type for brightness access */
     state->notification = (NotificationAppInternal*)furi_record_open(RECORD_NOTIFICATION);
 
-    /* Save original brightness to restore on exit */
+    /* Save original brightness and use it as starting point (don't override system setting) */
     state->original_brightness = state->notification->settings.display_brightness;
 
-    /* Enable always-on backlight */
+    /* Convert system brightness (0.0-1.0) to our percentage (0-100), rounded to nearest 5% step */
+    uint8_t system_brightness_pct = (uint8_t)(state->original_brightness * 100.0f);
+    state->brightness = (system_brightness_pct / BRIGHTNESS_STEP) * BRIGHTNESS_STEP;
+    if(state->brightness > BRIGHTNESS_MAX) state->brightness = BRIGHTNESS_MAX;
+
+    /* Enable always-on backlight (keeps current brightness, just prevents auto-off) */
     notification_message((NotificationApp*)state->notification, &sequence_display_backlight_enforce_on);
 
-    /* Apply initial brightness */
-    apply_brightness(state, state->brightness);
+    /* Set up periodic brightness refresh to prevent firmware from reverting after ~1 hour */
+    state->brightness_refresh_time = furi_get_tick() + BRIGHTNESS_REFRESH_MS;
 
 #ifdef DEBUG_MODE
     /* SubGHz radio is already initialized by the system
@@ -1309,6 +1319,16 @@ int32_t reality_clock_app(void* p) {
         /* Update readings */
         update_readings(state);
         view_port_update(view_port);
+
+        /*
+         * Periodically reapply brightness to prevent firmware from reverting it.
+         * The notification system has an internal timer that can reset brightness
+         * to system defaults after a timeout period (~1 hour).
+         */
+        if(furi_get_tick() >= state->brightness_refresh_time) {
+            apply_brightness(state, state->brightness);
+            state->brightness_refresh_time = furi_get_tick() + BRIGHTNESS_REFRESH_MS;
+        }
 
         /* Dynamic sample rate: faster during calibration */
         uint32_t interval = state->is_calibrated ?

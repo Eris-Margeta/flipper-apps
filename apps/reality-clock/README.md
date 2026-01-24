@@ -1,11 +1,11 @@
-# Reality Dimension Clock v4.0
+# Reality Dimension Clock v4.1
 
 > Dimensional stability monitoring using real CC1101 multi-band RSSI analysis
 
 ![Reality Dimension Clock Screenshot](screenshots/screenshot1.png)
 
 [![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)](https://flipperzero.one/)
-[![Version](https://img.shields.io/badge/version-4.0-blue)](../../releases)
+[![Version](https://img.shields.io/badge/version-4.1-blue)](../../releases)
 [![Release](https://img.shields.io/github/v/release/Eris-Margeta/flipper-apps?filter=reality-clock-v*&label=release)](https://github.com/Eris-Margeta/flipper-apps/releases?q=reality-clock)
 [![Status](https://img.shields.io/badge/status-real--sensors-brightgreen)]()
 
