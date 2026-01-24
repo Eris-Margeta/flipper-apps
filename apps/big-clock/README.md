@@ -1,11 +1,11 @@
-# Big Clock v1.2
+# Big Clock v1.3
 
 > Full-screen digital bedside/tableside clock with adjustable brightness
 
 ![Big Clock Screenshot](screenshots/screenshot1.png)
 
 [![Flipper Zero](https://img.shields.io/badge/Flipper%20Zero-FF6600?style=flat&logo=flipper&logoColor=white)](https://flipperzero.one/)
-[![Version](https://img.shields.io/badge/version-1.2-blue)](../../releases)
+[![Version](https://img.shields.io/badge/version-1.3-blue)](../../releases)
 [![Release](https://img.shields.io/github/v/release/Eris-Margeta/flipper-apps?filter=big-clock-v*&label=release)](https://github.com/Eris-Margeta/flipper-apps/releases?q=big-clock)
 [![CI](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml/badge.svg)](https://github.com/Eris-Margeta/flipper-apps/actions/workflows/ci.yml)
 
@@ -23,17 +23,18 @@ Turn your Flipper Zero into a **bedside or desk clock** with:
 ## Features
 
 - **Large Display**: Full-screen time display with custom 24x48 pixel digits
-- **Adjustable Brightness**: 11 levels from 0% (off) to 100% in 10% increments
+- **Adjustable Brightness**: 21 levels from 0% (off) to 100% in 5% increments
 - **Visual Feedback**: Shows brightness bar and percentage when adjusting
 - **Always On**: Backlight stays on while the app is running (no timeout)
 - **Flicker-Free**: Smooth brightness transitions without screen flashing
+- **Power Efficient**: Updates only once per minute (since we display HH:MM only)
 
 ## Controls
 
 | Button | Action |
 |--------|--------|
-| UP | Increase brightness (+10%) |
-| DOWN | Decrease brightness (-10%, down to 0% = off) |
+| UP | Increase brightness (+5%) |
+| DOWN | Decrease brightness (-5%, down to 0% = off) |
 | BACK | Exit application |
 
 ## Brightness Control
@@ -97,7 +98,7 @@ poetry run python -m ufbt launch
 | Stack Size | 2KB |
 | Version | 1.2 |
 
-**Implementation:** Uses direct hardware control via `furi_hal_light_set()` for brightness. Brightness levels mapped from 0-100% to hardware values (0-255). Continuously maintains brightness to prevent system timeout.
+**Implementation:** Uses direct notification settings modification for flicker-free brightness control. Screen updates every 60 seconds (power efficient for HH:MM display). Brightness is reapplied each update cycle to prevent firmware timeout reversion.
 
 ## Version History
 

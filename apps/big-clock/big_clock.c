@@ -79,8 +79,8 @@ typedef struct {
 /** Brightness control */
 #define BRIGHTNESS_MIN       0
 #define BRIGHTNESS_MAX       100
-#define BRIGHTNESS_STEP      10
-#define BRIGHTNESS_DISPLAY_DURATION 3  /* seconds to show indicator */
+#define BRIGHTNESS_STEP      5
+#define BRIGHTNESS_DISPLAY_MS 500  /* milliseconds to show brightness indicator after change */
 
 /** Layout calculations */
 #define CLOCK_TOTAL_WIDTH    (4 * DIGIT_WIDTH + COLON_WIDTH)  /* 104 pixels */
@@ -88,7 +88,7 @@ typedef struct {
 
 /** Input handling */
 #define INPUT_QUEUE_SIZE     8
-#define UPDATE_INTERVAL_MS   1000
+#define UPDATE_INTERVAL_MS   60000  /* 60 seconds - power efficient since we only show HH:MM */
 
 /* ============================================================================
  * TYPES
@@ -103,7 +103,7 @@ typedef struct {
     uint8_t hour;                    /**< Current hour (0-23) */
     uint8_t minute;                  /**< Current minute (0-59) */
     uint8_t brightness;              /**< Brightness level (0-100) */
-    uint8_t brightness_indicator;    /**< Countdown timer for brightness UI */
+    uint32_t brightness_show_until;  /**< Timestamp until which to show brightness UI */
     bool is_running;                 /**< Application run state */
     NotificationAppInternal* notification; /**< Notification service handle (internal cast) */
     float original_brightness;       /**< Saved brightness to restore on exit */
@@ -400,8 +400,8 @@ static void render_callback(Canvas* canvas, void* ctx) {
     x += DIGIT_WIDTH;
     draw_digit(canvas, state->minute % 10, x, y);
 
-    /* Show brightness indicator if recently changed */
-    if(state->brightness_indicator > 0) {
+    /* Show brightness indicator if recently changed (timestamp-based) */
+    if(furi_get_tick() < state->brightness_show_until) {
         draw_brightness_indicator(canvas, state->brightness);
     }
 }
@@ -464,7 +464,7 @@ static void brightness_increase(BigClockState* state) {
             state->brightness = BRIGHTNESS_MAX;
         }
         backlight_set_brightness(state, state->brightness);
-        state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
+        state->brightness_show_until = furi_get_tick() + BRIGHTNESS_DISPLAY_MS;
     }
 }
 
@@ -477,7 +477,7 @@ static void brightness_decrease(BigClockState* state) {
     if(state->brightness >= BRIGHTNESS_STEP) {
         state->brightness -= BRIGHTNESS_STEP;
         backlight_set_brightness(state, state->brightness);
-        state->brightness_indicator = BRIGHTNESS_DISPLAY_DURATION;
+        state->brightness_show_until = furi_get_tick() + BRIGHTNESS_DISPLAY_MS;
     }
 }
 
@@ -544,7 +544,7 @@ static BigClockState* state_alloc(void) {
     state->hour = 0;
     state->minute = 0;
     state->brightness = BRIGHTNESS_MAX;
-    state->brightness_indicator = 0;
+    state->brightness_show_until = 0;
     state->is_running = true;
     state->notification = NULL;
     state->original_brightness = 1.0f;
@@ -588,14 +588,23 @@ int32_t big_clock_app(void* p) {
     /* Open notification service and cast to internal type for brightness access */
     state->notification = (NotificationAppInternal*)furi_record_open(RECORD_NOTIFICATION);
 
-    /* Save original brightness to restore on exit */
+    /* Save original brightness and use it as our starting point (don't override system setting) */
     state->original_brightness = state->notification->settings.display_brightness;
 
-    /* Enable always-on backlight */
+    /* Convert system brightness (0.0-1.0) to our percentage (0-100), rounded to nearest 10% step */
+    uint8_t system_brightness_pct = (uint8_t)(state->original_brightness * 100.0f);
+    state->brightness = (system_brightness_pct / BRIGHTNESS_STEP) * BRIGHTNESS_STEP;
+    if(state->brightness > BRIGHTNESS_MAX) state->brightness = BRIGHTNESS_MAX;
+
+    /* Enable always-on backlight (keeps current brightness, just prevents auto-off) */
     notification_message((NotificationApp*)state->notification, &sequence_display_backlight_enforce_on);
 
-    /* Set initial brightness */
-    backlight_set_brightness(state, state->brightness);
+    /* Get initial time */
+    update_time(state);
+
+    /* Briefly flash brightness indicator so user knows current level (2 seconds) */
+    state->brightness_show_until = furi_get_tick() + 2000;
+    view_port_update(view_port);
 
     /* Main loop */
     InputEvent event;
@@ -604,10 +613,14 @@ int32_t big_clock_app(void* p) {
         /* Update current time */
         update_time(state);
 
-        /* Decrement brightness indicator timer */
-        if(state->brightness_indicator > 0) {
-            state->brightness_indicator--;
-        }
+        /*
+         * Reapply brightness every update cycle to prevent firmware from reverting it.
+         * The notification system has an internal timer that can reset brightness
+         * to system defaults after a timeout period (~1 hour). By reapplying every
+         * 60 seconds (when we update the display anyway), we ensure our brightness
+         * setting persists while remaining power efficient.
+         */
+        backlight_set_brightness(state, state->brightness);
 
         /* Request screen redraw */
         view_port_update(view_port);
@@ -615,6 +628,8 @@ int32_t big_clock_app(void* p) {
         /* Process input events (with timeout for periodic updates) */
         if(furi_message_queue_get(event_queue, &event, UPDATE_INTERVAL_MS) == FuriStatusOk) {
             process_input(state, &event);
+            /* Immediate redraw after input to show brightness indicator */
+            view_port_update(view_port);
         }
     }
 
