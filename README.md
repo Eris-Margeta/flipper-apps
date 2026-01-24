@@ -283,14 +283,14 @@ This monorepo supports two release types that can coexist:
 | Release Type | Purpose | Example Tags |
 |--------------|---------|--------------|
 | **App-specific** | Individual app updates | `reality-clock-v4.0`, `big-clock-v1.2-beta` |
-| **Monorepo bundle** | Coordinated stable release | `v2024.01`, `v1.0.0` |
+| **Monorepo bundle** | Coordinated stable release | `v2026.01`, `v1.0.0` |
 
 **Recommended workflow:**
 ```
 reality-clock-v4.0        # Stable release of reality-clock
 reality-clock-v4.1-beta   # Beta testing new features
 reality-clock-v4.1        # Promote beta to stable
-v2024.02                  # Stable bundle (all apps known-good)
+v2026.02                  # Stable bundle (all apps known-good)
 ```
 
 ### Tag Naming Convention
@@ -312,9 +312,9 @@ Examples:
 v<version>[-prerelease]
 
 Examples:
-  v2024.01                    # January 2024 stable bundle
+  v2026.01                    # January 2026 stable bundle
   v1.0.0                      # Semantic version stable
-  v2024.02-beta               # Beta bundle
+  v2026.02-beta               # Beta bundle
 ```
 
 ### Version Validation
