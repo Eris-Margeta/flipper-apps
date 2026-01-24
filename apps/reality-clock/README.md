@@ -148,7 +148,7 @@ poetry run ufbt launch    # Build + install + run
 | App Type | External (.fap) |
 | Category | Tools |
 | Stack Size | 8KB |
-| Version | 3.0 |
+| Version | 4.1 |
 | Sensor Mode | Real Hardware (CC1101 + ADC) |
 | Frequency Bands | 315 / 433.92 / 868.35 MHz |
 | Buffer Size | 1000 samples per band |

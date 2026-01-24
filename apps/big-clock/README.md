@@ -96,7 +96,7 @@ poetry run python -m ufbt launch
 | App Type | External (.fap) |
 | Category | Tools |
 | Stack Size | 2KB |
-| Version | 1.2 |
+| Version | 1.3 |
 
 **Implementation:** Uses direct notification settings modification for flicker-free brightness control. Screen updates every 60 seconds (power efficient for HH:MM display). Brightness is reapplied each update cycle to prevent firmware timeout reversion.
 
